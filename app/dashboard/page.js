@@ -49,7 +49,7 @@ export default function Dashboard() {
         {isAgency ? (
           <>
             <div className="grp">Work</div>
-            <nav className="nav"><a className="on">Action plan</a><a>My work</a><a onClick={() => router.push("/clients")} style={{cursor:"pointer"}}>Clients</a></nav>
+            <nav className="nav"><a className="on">Action plan</a><a>My work</a><a onClick={() => router.push("/clients")} style={{cursor:"pointer"}}>Clients</a><a onClick={() => router.push("/invite")} style={{cursor:"pointer"}}>Invite people</a></nav>
             <div className="grp">Performance</div>
             <nav className="nav"><a>Paid Media</a><a>SEO</a><a>ASO</a></nav>
             <div className="grp">Team</div>
