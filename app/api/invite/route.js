@@ -24,6 +24,9 @@ export async function POST(req) {
   let body;
   try { body = await req.json(); } catch { return Response.json({ error: "Bad request" }, { status: 400 }); }
   const email = (body?.email || "").trim().toLowerCase();
+  if (!email.endsWith("@welcometomorrow.io")) {
+    return Response.json({ error: "This screen is for agency teammates (@welcometomorrow.io). To add a client, use the Clients screen." }, { status: 400 });
+  }
   const fullName = (body?.fullName || "").trim();
   if (!email || !email.includes("@")) return Response.json({ error: "A valid email is required" }, { status: 400 });
 

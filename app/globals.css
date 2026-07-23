@@ -3,7 +3,7 @@
   --cloud:#F5F6F8; --paper:#FFF; --line:#E6E8EC; --line-2:#EEF0F3;
   --text:#14181F; --muted:#5B6472; --faint:#8A93A2;
   --on-dark:#FFF; --on-dark-mut:#9AA3B2; --on-dark-faint:#5A6474;
-  --gold:#F7C948; --gold-ink:#2A2205; --gold-soft:#FBEFC2;
+  --gold:#F7C948; --gold-ink:#2A2205; --gold-soft:#FBEFC2; --border-accent:#F7C948;
   --teal:#12A594; --cobalt:#3D4EE8;
   --grad-mark:linear-gradient(150deg,#0B1E3A,#0E2E3A 55%,#0E3B36);
   --grid:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cpath d='M60 0H0V60' fill='none' stroke='%23F7C948' stroke-opacity='0.10' stroke-width='1'/%3E%3C/svg%3E");

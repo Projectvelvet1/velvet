@@ -57,7 +57,7 @@ export default function Invite() {
       </aside>
 
       <main className="main">
-        <div className="topbar"><h1 style={{ fontSize: 24 }}>Invite people</h1></div>
+        <div className="topbar"><h1 style={{ fontSize: 24 }}>Invite a teammate</h1></div>
 
         {!allowed ? (
           <div className="empty">Only a super admin can invite people.</div>
