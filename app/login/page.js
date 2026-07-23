@@ -8,11 +8,12 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submit(e) {
     e.preventDefault();
-    setErr(""); setBusy(true);
+    setErr(""); setNote(""); setBusy(true);
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
@@ -24,6 +25,15 @@ export default function Login() {
     }
   }
 
+  async function forgot() {
+    setErr(""); setNote("");
+    if (!email || !email.includes("@")) { setErr("Type your email above first, then click Forgot password."); return; }
+    const origin = window.location.origin;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${origin}/set-password` });
+    if (error) { setErr(error.message); return; }
+    setNote("If that email has an account, a reset link is on its way. Check your inbox.");
+  }
+
   return (
     <div className="auth-wrap">
       <form className="auth-card" onSubmit={submit}>
@@ -32,6 +42,7 @@ export default function Login() {
         <div className="sub">Welcome Tomorrow</div>
 
         {err && <div className="auth-msg auth-err">{err}</div>}
+        {note && <div className="auth-msg auth-ok">{note}</div>}
 
         <div className="field">
           <label>Email</label>
@@ -39,14 +50,17 @@ export default function Login() {
         </div>
         <div className="field">
           <label>Password</label>
-          <input className="input" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+          <input className="input" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Your password" />
         </div>
 
         <button className="btn btn-primary" style={{ width: "100%", marginTop: 6 }} disabled={busy}>
           {busy ? "Please wait…" : "Sign in"}
         </button>
 
-        <div className="auth-alt">Velvet is invite-only. Ask an admin for an invite.</div>
+        <div className="auth-alt" style={{ marginTop: 14 }}>
+          <b onClick={forgot} style={{ cursor: "pointer" }}>Forgot password?</b>
+        </div>
+        <div className="auth-alt" style={{ marginTop: 6 }}>Velvet is invite-only. Ask an admin for an invite.</div>
       </form>
     </div>
   );

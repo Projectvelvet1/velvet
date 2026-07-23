@@ -29,7 +29,7 @@ export async function POST(req) {
 
   // where the invited person lands to set their password
   const origin = req.headers.get("origin") || `https://${req.headers.get("host")}`;
-  const redirectTo = `${origin}/login`;
+  const redirectTo = `${origin}/set-password`;
 
   const db = admin();
   const { data, error } = await db.auth.admin.inviteUserByEmail(email, {
