@@ -32,14 +32,14 @@ export default function Team() {
     })();
   }, [router]);
 
-  function openEdit(p) { setErr(""); setEdit({ ...p, fullName: p.full_name || "", jobTitle: p.job_title || "", homeDepartment: p.home_department || "", isSuperAdmin: !!p.is_super_admin }); }
+  function openEdit(p) { setErr(""); setEdit({ ...p, fullName: p.full_name || "", jobTitle: p.job_title || "", homeDepartment: p.home_department || "" }); }
 
   async function save(e) {
     e.preventDefault(); setBusy(true); setErr("");
     const { data } = await supabase.auth.getSession();
     const res = await fetch("/api/team", {
       method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` },
-      body: JSON.stringify({ id: edit.id, fullName: edit.fullName, jobTitle: edit.jobTitle, homeDepartment: edit.homeDepartment || null, isSuperAdmin: !!edit.isSuperAdmin }),
+      body: JSON.stringify({ id: edit.id, fullName: edit.fullName, jobTitle: edit.jobTitle, homeDepartment: edit.homeDepartment || null }),
     });
     const j = await res.json(); setBusy(false);
     if (!res.ok) { setErr(j.error || "Could not save"); return; }
@@ -97,15 +97,6 @@ export default function Team() {
                 <option value="content">Content</option>
                 <option value="analytics">Analytics</option>
               </select></div>
-            <div className="field" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <input
-                type="checkbox"
-                id="isSuperAdmin"
-                checked={!!edit.isSuperAdmin}
-                onChange={(e) => setEdit({ ...edit, isSuperAdmin: e.target.checked })}
-              />
-              <label htmlFor="isSuperAdmin" style={{ margin: 0 }}>Super admin</label>
-            </div>
             <button className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
           </form>
         </Modal>
