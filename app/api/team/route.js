@@ -20,11 +20,22 @@ export async function POST(req) {
   const id = body?.id;
   if (!id) return Response.json({ error: "Missing person" }, { status: 400 });
   const db = admin();
-  const { error } = await db.from("profiles").update({
+  const update = {
     full_name: (body?.fullName ?? "").trim() || null,
     job_title: (body?.jobTitle ?? "").trim() || null,
     home_department: body?.homeDepartment || null,
-  }).eq("id", id).eq("side", "agency");
+  };
+  // Only touch is_super_admin if the caller actually sent it, so this
+  // route still works for plain profile edits that don't include it.
+  if (Object.prototype.hasOwnProperty.call(body ?? {}, "isSuperAdmin")) {
+    // Prevent a super admin from locking themselves out by demoting
+    // their own account through this screen.
+    if (id === uid && !body.isSuperAdmin) {
+      return Response.json({ error: "You can't remove your own super admin access." }, { status: 400 });
+    }
+    update.is_super_admin = !!body.isSuperAdmin;
+  }
+  const { error } = await db.from("profiles").update(update).eq("id", id).eq("side", "agency");
   if (error) return Response.json({ error: error.message }, { status: 500 });
   return Response.json({ ok: true });
 }
