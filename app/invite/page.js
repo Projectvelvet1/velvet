@@ -13,6 +13,8 @@ export default function Invite() {
   const [show, setShow] = useState(false);
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
+  const [homeDepartment, setHomeDepartment] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [flash, setFlash] = useState("");
@@ -26,14 +28,14 @@ export default function Invite() {
     })();
   }, [router]);
 
-  function openModal() { setEmail(""); setFullName(""); setErr(""); setShow(true); }
+  function openModal() { setEmail(""); setFullName(""); setJobTitle(""); setHomeDepartment(""); setErr(""); setShow(true); }
 
   async function send(e) {
     e.preventDefault(); setBusy(true); setErr("");
     const { data } = await supabase.auth.getSession();
     const res = await fetch("/api/invite", {
       method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` },
-      body: JSON.stringify({ email, fullName }),
+      body: JSON.stringify({ email, fullName, jobTitle, homeDepartment: homeDepartment || null }),
     });
     const j = await res.json(); setBusy(false);
     if (!res.ok) { setErr(j.error || "Could not send invite"); return; }
@@ -85,6 +87,15 @@ export default function Invite() {
               <input className="input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@welcometomorrow.io" /></div>
             <div className="field"><label>Their name (optional)</label>
               <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full name" /></div>
+            <div className="field"><label>Job title</label>
+              <input className="input" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="e.g. Paid Media Specialist" /></div>
+            <div className="field"><label>Home department</label>
+              <select className="input" value={homeDepartment} onChange={(e) => setHomeDepartment(e.target.value)}>
+                <option value="">Select department…</option>
+                <option value="performance">Performance</option>
+                <option value="content">Content</option>
+                <option value="analytics">Analytics</option>
+              </select></div>
             <button className="btn btn-primary" disabled={busy}>{busy ? "Sending…" : "Send invite"}</button>
           </form>
         </Modal>

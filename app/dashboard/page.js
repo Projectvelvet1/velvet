@@ -59,7 +59,7 @@ export default function Dashboard() {
         <a className="svc-menu svc svc-aso"><span className="svc-dot" />ASO</a>
       </nav>
       <div className="grp">Team</div>
-      <nav className="nav"><a>Replays</a><a>Reports &amp; docs</a></nav>
+      <nav className="nav"><a onClick={() => router.push("/team")} style={{cursor:"pointer"}}>Team</a><a>Replays</a><a>Reports &amp; docs</a></nav>
     </>
   ) : (
     <>

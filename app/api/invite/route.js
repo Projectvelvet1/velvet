@@ -28,6 +28,8 @@ export async function POST(req) {
     return Response.json({ error: "This screen is for agency teammates (@welcometomorrow.io). To add a client, use the Clients screen." }, { status: 400 });
   }
   const fullName = (body?.fullName || "").trim();
+  const jobTitle = (body?.jobTitle || "").trim();
+  const homeDepartment = body?.homeDepartment || null;
   if (!email || !email.includes("@")) return Response.json({ error: "A valid email is required" }, { status: 400 });
 
   // where the invited person lands to set their password
@@ -44,5 +46,12 @@ export async function POST(req) {
     return Response.json({ error: error.message }, { status: 400 });
   }
   const side = email.endsWith("@welcometomorrow.io") ? "agency" : "client";
+  // store job title + home department on their profile
+  if (data?.user?.id) {
+    await db.from("profiles").upsert(
+      { id: data.user.id, email, side, job_title: jobTitle || null, home_department: homeDepartment },
+      { onConflict: "id" }
+    );
+  }
   return Response.json({ ok: true, email, side });
 }
