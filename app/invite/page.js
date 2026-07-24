@@ -15,7 +15,6 @@ export default function Invite() {
   const [fullName, setFullName] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [homeDepartment, setHomeDepartment] = useState("");
-  const [level, setLevel] = useState("team");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [flash, setFlash] = useState("");
@@ -29,14 +28,14 @@ export default function Invite() {
     })();
   }, [router]);
 
-  function openModal() { setEmail(""); setFullName(""); setJobTitle(""); setHomeDepartment(""); setLevel("team"); setErr(""); setShow(true); }
+  function openModal() { setEmail(""); setFullName(""); setJobTitle(""); setHomeDepartment(""); setErr(""); setShow(true); }
 
   async function send(e) {
     e.preventDefault(); setBusy(true); setErr("");
     const { data } = await supabase.auth.getSession();
     const res = await fetch("/api/invite", {
       method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` },
-      body: JSON.stringify({ email, fullName, jobTitle, homeDepartment: homeDepartment || null, level }),
+      body: JSON.stringify({ email, fullName, jobTitle, homeDepartment: homeDepartment || null }),
     });
     const j = await res.json(); setBusy(false);
     if (!res.ok) { setErr(j.error || "Could not send invite"); return; }
@@ -97,12 +96,6 @@ export default function Invite() {
                 <option value="content">Content</option>
                 <option value="analytics">Analytics</option>
               </select></div>
-            <div className="field"><label>Access level</label>
-              <select className="input" value={level} onChange={(e) => setLevel(e.target.value)}>
-                <option value="team">Team member</option>
-                <option value="super">Super admin (full access)</option>
-              </select>
-              <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 5 }}>Super admins can manage everything, including creating clients and other admins.</div></div>
             <button className="btn btn-primary" disabled={busy}>{busy ? "Sending…" : "Send invite"}</button>
           </form>
         </Modal>
