@@ -34,6 +34,13 @@ export default function Clients() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [flash, setFlash] = useState("");
+  // prospect modal
+  const [showProspect, setShowProspect] = useState(false);
+  const [pName, setPName] = useState("");
+  const [pEmail, setPEmail] = useState("");
+  const [pBusy, setPBusy] = useState(false);
+  const [pErr, setPErr] = useState("");
+  const [prospectLink, setProspectLink] = useState("");
 
   async function token() { const { data } = await supabase.auth.getSession(); return data.session?.access_token; }
   async function load() {
@@ -75,6 +82,18 @@ export default function Clients() {
   }
   function teamName(p) { return p.full_name || p.email; }
 
+  function openProspect() { setPName(""); setPEmail(""); setPErr(""); setProspectLink(""); setShowProspect(true); }
+  async function addProspect(e) {
+    e.preventDefault(); setPBusy(true); setPErr("");
+    const t = await token();
+    const res = await fetch("/api/prospects", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify({ name: pName, email: pEmail }) });
+    const j = await res.json(); setPBusy(false);
+    if (!res.ok) { setPErr(j.error || "Could not add prospect"); return; }
+    setProspectLink(j.loginLink || "");
+    setFlash(`Prospect "${j.client.name}" invited at ${j.invited}.`);
+    load(); setTimeout(() => setFlash(""), 8000);
+  }
+
   async function addClient(e) {
     e.preventDefault(); setErr("");
     if (!projectLeadId) { setErr("Please choose a project lead."); return; }
@@ -113,7 +132,10 @@ export default function Clients() {
     <Shell profile={profile} roleLabel={profile?.is_super_admin ? "Super admin" : "Team member"} nav={nav}>
       <div className="page-head">
         <h1 style={{ fontSize: 24 }}>Clients</h1>
-        {canAdd && <button className="btn btn-primary" onClick={openModal}>+ Add client</button>}
+        {canAdd && (<div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-ghost" onClick={openProspect}>+ Add prospect</button>
+          <button className="btn btn-primary" onClick={openModal}>+ Add client</button>
+        </div>)}
       </div>
 
       {flash && <div className="auth-msg auth-ok" style={{ display: "inline-block" }}>{flash}</div>}
@@ -124,6 +146,7 @@ export default function Clients() {
         <div className="card" key={c.id}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
             <b>{c.name}</b>
+            <span className="pill p-agency">{c.phase === "prospect" ? "prospect" : (c.phase || "signed")}</span>
             {c.is_demo && <span className="pill p-agency">demo</span>}
           </div>
           <div style={{ color: "var(--muted)", fontSize: 13, margin: "4px 0 8px" }}>
@@ -204,6 +227,34 @@ export default function Clients() {
           </form>
         </Modal>
       )}
+      {showProspect && (
+        <Modal title="Add a prospect" onClose={() => setShowProspect(false)}>
+          <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 0 }}>
+            A prospect is a lead who hasn't signed yet. They get a discovery onboarding only, and see the services we offer (blurred) as a teaser. They sign in to protect their data.
+          </p>
+          {pErr && <div className="auth-msg auth-err">{pErr}</div>}
+          {!prospectLink ? (
+            <form onSubmit={addProspect}>
+              <div className="field"><label>Prospect / company name</label>
+                <input className="input" value={pName} onChange={(e) => setPName(e.target.value)} placeholder="e.g. Acme Bank" required /></div>
+              <div className="field"><label>Their email (gets the invite)</label>
+                <input className="input" type="email" value={pEmail} onChange={(e) => setPEmail(e.target.value)} placeholder="contact@acme.com" required /></div>
+              <button className="btn btn-primary" disabled={pBusy}>{pBusy ? "Inviting…" : "Invite prospect"}</button>
+            </form>
+          ) : (
+            <>
+              <div className="auth-msg auth-ok">Prospect invited. Share this sign-in link with them too:</div>
+              <div className="field">
+                <input className="input" readOnly value={prospectLink} onFocus={(e) => e.target.select()} />
+                <button type="button" className="btn btn-ghost" style={{ marginTop: 8 }}
+                  onClick={() => navigator.clipboard?.writeText(prospectLink)}>Copy link</button>
+              </div>
+              <button className="btn btn-primary" onClick={() => setShowProspect(false)}>Done</button>
+            </>
+          )}
+        </Modal>
+      )}
+
     </Shell>
   );
 }
