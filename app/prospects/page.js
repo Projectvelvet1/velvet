@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import Shell from "../../components/Shell";
+import AgencyNav from "../../components/AgencyNav";
+import { loadAgencyDepts } from "../../lib/agencyNav";
 import Modal from "../../components/Modal";
 
 const CATALOG = [
@@ -13,6 +15,7 @@ const CATALOG = [
 
 export default function Prospects() {
   const router = useRouter();
+  const [depts, setDepts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
   const [allowed, setAllowed] = useState(false);
@@ -44,6 +47,7 @@ export default function Prospects() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.replace("/login"); return; }
       const { data: prof } = await supabase.from("profiles").select("full_name,email,side,is_super_admin").eq("id", session.user.id).single();
+      setDepts(await loadAgencyDepts(session.user.id, !!prof?.is_super_admin));
       if (prof?.side !== "agency") { router.replace("/dashboard"); return; }
       if (!prof?.is_super_admin) { router.replace("/dashboard"); return; }  // super-admin only
       setProfile(prof);
@@ -80,19 +84,7 @@ export default function Prospects() {
     setConv(null); setFlash(`"${j.client.name}" is now a client.`); load(); setTimeout(() => setFlash(""), 6000);
   }
 
-  const nav = (
-    <>
-      <div className="grp">Work</div>
-      <nav className="nav">
-        <a onClick={() => router.push("/dashboard")} style={{cursor:"pointer"}}>Dashboard</a>
-        <a onClick={() => router.push("/clients")} style={{cursor:"pointer"}}>Clients</a>
-        <a className="on">Prospects</a>
-        <a onClick={() => router.push("/invite")} style={{cursor:"pointer"}}>Invite teammate</a>
-      </nav>
-      <div className="grp">Team</div>
-      <nav className="nav"><a onClick={() => router.push("/team")} style={{cursor:"pointer"}}>Team</a><a>Replays</a><a>Reports &amp; docs</a></nav>
-    </>
-  );
+  const nav = <AgencyNav profile={profile} active="prospects" depts={depts} />;
 
   if (loading) return <div className="center">Loading…</div>;
 

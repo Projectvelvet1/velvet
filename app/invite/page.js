@@ -3,10 +3,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import Shell from "../../components/Shell";
+import AgencyNav from "../../components/AgencyNav";
+import { loadAgencyDepts } from "../../lib/agencyNav";
 import Modal from "../../components/Modal";
 
 export default function Invite() {
   const router = useRouter();
+  const [depts, setDepts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [allowed, setAllowed] = useState(false);
   const [profile, setProfile] = useState(null);
@@ -25,6 +28,7 @@ export default function Invite() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.replace("/login"); return; }
       const { data: prof } = await supabase.from("profiles").select("full_name,email,is_super_admin").eq("id", session.user.id).single();
+      setDepts(await loadAgencyDepts(session.user.id, !!prof?.is_super_admin));
       setProfile(prof); setAllowed(!!prof?.is_super_admin); setLoading(false);
     })();
   }, [router]);
@@ -43,17 +47,7 @@ export default function Invite() {
     setShow(false); setFlash(`Invite sent to ${j.email}.`); setTimeout(() => setFlash(""), 6000);
   }
 
-  const nav = (
-    <>
-      <div className="grp">Work</div>
-      <nav className="nav">
-        <a onClick={() => router.push("/dashboard")} style={{cursor:"pointer"}}>Dashboard</a>
-        <a onClick={() => router.push("/clients")} style={{cursor:"pointer"}}>Clients</a>
-        {profile?.is_super_admin && <a onClick={() => router.push("/prospects")} style={{cursor:"pointer"}}>Prospects</a>}
-        <a className="on">Invite teammate</a>
-      </nav>
-    </>
-  );
+  const nav = <AgencyNav profile={profile} active="invite" depts={depts} />;
 
   if (loading) return <div className="center">Loading…</div>;
 
