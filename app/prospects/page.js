@@ -5,6 +5,12 @@ import { supabase } from "../../lib/supabase";
 import Shell from "../../components/Shell";
 import Modal from "../../components/Modal";
 
+const CATALOG = [
+  { department: "performance", group: "Performance", items: [ { key: "paid_media", label: "Paid Media" }, { key: "seo", label: "SEO" }, { key: "aso", label: "ASO" } ] },
+  { department: "content", group: "Content", items: [ { key: "creative_strategy", label: "Creative Strategy" }, { key: "asset_production", label: "Asset Production" }, { key: "ugc", label: "UGC" } ] },
+  { department: "analytics", group: "Analytics", items: [ { key: "tracking", label: "Tracking" }, { key: "dashboarding", label: "Dashboarding" } ] },
+];
+
 export default function Prospects() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -18,6 +24,13 @@ export default function Prospects() {
   const [err, setErr] = useState("");
   const [link, setLink] = useState("");
   const [flash, setFlash] = useState("");
+  const [team, setTeam] = useState([]);
+  const [conv, setConv] = useState(null);            // prospect being converted
+  const [cLead, setCLead] = useState("");
+  const [cPicked, setCPicked] = useState({});
+  const [cAssign, setCAssign] = useState({});
+  const [cBusy, setCBusy] = useState(false);
+  const [cErr, setCErr] = useState("");
 
   async function token() { const { data } = await supabase.auth.getSession(); return data.session?.access_token; }
   async function load() {
@@ -33,7 +46,10 @@ export default function Prospects() {
       const { data: prof } = await supabase.from("profiles").select("full_name,email,side,is_super_admin").eq("id", session.user.id).single();
       if (prof?.side !== "agency") { router.replace("/dashboard"); return; }
       if (!prof?.is_super_admin) { router.replace("/dashboard"); return; }  // super-admin only
-      setProfile(prof); await load(); setLoading(false);
+      setProfile(prof);
+      const { data: tm } = await supabase.from("profiles").select("id,full_name,email").eq("side","agency").order("full_name");
+      setTeam(tm || []);
+      await load(); setLoading(false);
     })();
   }, [router]);
 
@@ -46,6 +62,22 @@ export default function Prospects() {
     if (!res.ok) { setErr(j.error || "Could not add prospect"); return; }
     setLink(j.loginLink || ""); setFlash(`Prospect "${j.client.name}" invited at ${j.invited}.`);
     load(); setTimeout(() => setFlash(""), 8000);
+  }
+
+  function openConvert(pr) { setConv(pr); setCLead(""); setCPicked({}); setCAssign({}); setCErr(""); }
+  function cToggleSvc(dep, it) { setCPicked((p) => { const n = { ...p }; if (n[it.key]) { delete n[it.key]; setCAssign((a)=>{const b={...a}; delete b[it.key]; return b;}); } else n[it.key] = { department: dep, service_key: it.key, service_label: it.label }; return n; }); }
+  function cToggleAssignee(sk, pid) { setCAssign((a) => { const cur = new Set(a[sk] || []); cur.has(pid) ? cur.delete(pid) : cur.add(pid); return { ...a, [sk]: [...cur] }; }); }
+  async function doConvert(e) {
+    e.preventDefault(); setCErr("");
+    if (!cLead) { setCErr("Please choose a project lead."); return; }
+    setCBusy(true);
+    const teamAssignments = [];
+    Object.entries(cAssign).forEach(([sk, ids]) => ids.forEach((pid) => teamAssignments.push({ profile_id: pid, service_key: sk })));
+    const t = await token();
+    const res = await fetch("/api/convert", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify({ workspaceId: conv.id, projectLeadId: cLead, services: Object.values(cPicked), teamAssignments }) });
+    const j = await res.json(); setCBusy(false);
+    if (!res.ok) { setCErr(j.error || "Could not convert"); return; }
+    setConv(null); setFlash(`"${j.client.name}" is now a client.`); load(); setTimeout(() => setFlash(""), 6000);
   }
 
   const nav = (
@@ -84,7 +116,7 @@ export default function Prospects() {
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button className="btn btn-ghost" onClick={() => router.push(`/client/${p.id}`)}>Open (view as)</button>
-              <button className="btn btn-ghost" disabled title="Coming next">Convert to client</button>
+              <button className="btn btn-primary" onClick={() => openConvert(p)}>Convert to client</button>
             </div>
           </div>
         ))}
@@ -115,6 +147,53 @@ export default function Prospects() {
           )}
         </Modal>
       )}
+      {conv && (
+        <Modal title={`Convert ${conv.name} to a client`} onClose={() => setConv(null)}>
+          <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 0 }}>Their discovery answers stay with them. Add the services they signed for, a project lead, and the team.</p>
+          {cErr && <div className="auth-msg auth-err">{cErr}</div>}
+          <form onSubmit={doConvert}>
+            <div className="field"><label>Project lead (agency owner) *</label>
+              <select className="input" value={cLead} onChange={(e) => setCLead(e.target.value)} required>
+                <option value="">Choose an agency teammate…</option>
+                {team.map((p) => <option key={p.id} value={p.id}>{p.full_name || p.email}</option>)}
+              </select>
+            </div>
+            <div className="field"><label>Services they signed for</label>
+              {CATALOG.map((g) => (
+                <div key={g.group} style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, color: "var(--faint)", textTransform: "uppercase", letterSpacing: ".08em", margin: "6px 0 4px" }}>{g.group}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {g.items.map((it) => (
+                      <button type="button" key={it.key} onClick={() => cToggleSvc(g.department, it)}
+                        className={"pill svc svc-" + it.key + (cPicked[it.key] ? " svc-pill" : "")}
+                        style={{ border: "1px solid var(--line)", background: cPicked[it.key] ? undefined : "var(--paper)", cursor: "pointer" }}>
+                        {cPicked[it.key] ? "✓ " : ""}{it.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {Object.values(cPicked).length > 0 && (
+              <div className="field"><label>Assign team to each service</label>
+                {Object.values(cPicked).map((s) => (
+                  <div key={s.service_key} style={{ margin: "8px 0", padding: "10px 12px", border: "1px solid var(--line)", borderRadius: "var(--r-sm)" }}>
+                    <div className={"svc svc-" + s.service_key} style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, display: "flex", alignItems: "center" }}><span className="svc-dot" />{s.service_label}</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {team.map((p) => {
+                        const on = (cAssign[s.service_key] || []).includes(p.id);
+                        return (<button type="button" key={p.id} onClick={() => cToggleAssignee(s.service_key, p.id)} className="pill" style={{ border: "1px solid var(--line)", cursor: "pointer", background: on ? "var(--bg-accent)" : "var(--paper)", color: on ? "var(--text-accent)" : "var(--text)" }}>{on ? "✓ " : ""}{p.full_name || p.email}</button>);
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button className="btn btn-primary" disabled={cBusy}>{cBusy ? "Converting…" : "Convert to client"}</button>
+          </form>
+        </Modal>
+      )}
+
     </Shell>
   );
 }
