@@ -44,3 +44,12 @@ export async function POST(req) {
   const loginLink = `${origin}/login`;
   return Response.json({ ok: true, client: ws, invited: email, agencyLink, loginLink });
 }
+
+export async function GET(req) {
+  const uid = await requireSuperAdmin(req);
+  if (!uid) return Response.json({ error: "Not allowed" }, { status: 403 });
+  const db = admin();
+  const { data } = await db.from("workspaces")
+    .select("id,name,phase,discovery_complete,created_at").eq("phase", "prospect").order("created_at", { ascending: false });
+  return Response.json({ prospects: data || [] });
+}

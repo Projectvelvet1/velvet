@@ -49,6 +49,7 @@ export default function Invite() {
       <nav className="nav">
         <a onClick={() => router.push("/dashboard")} style={{cursor:"pointer"}}>Dashboard</a>
         <a onClick={() => router.push("/clients")} style={{cursor:"pointer"}}>Clients</a>
+        {profile?.is_super_admin && <a onClick={() => router.push("/prospects")} style={{cursor:"pointer"}}>Prospects</a>}
         <a className="on">Invite teammate</a>
       </nav>
     </>

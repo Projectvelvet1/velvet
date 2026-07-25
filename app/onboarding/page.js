@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
 // PLACEHOLDER discovery questions. Swap in the real questionnaire later.
@@ -19,8 +19,13 @@ const STEPS = [
   ]},
 ];
 
-export default function Onboarding() {
+export const dynamic = "force-dynamic";
+
+function OnboardingInner() {
   const router = useRouter();
+  const search = useSearchParams();
+  const wsParam = search.get("ws");
+  const [asAgency, setAsAgency] = useState(false);
   const [loading, setLoading] = useState(true);
   const [ws, setWs] = useState(null);
   const [answers, setAnswers] = useState({});
@@ -32,8 +37,16 @@ export default function Onboarding() {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.replace("/login"); return; }
-      const { data: w } = await supabase.from("workspaces").select("id,name,phase,discovery_complete").limit(1);
-      const wk = w?.[0] || null; setWs(wk);
+      let wk = null;
+      if (wsParam) {
+        // agency acting on a client's behalf: authorise via server, then load
+        const res = await fetch(`/api/client-context?id=${wsParam}`, { headers: { Authorization: `Bearer ${session.access_token}` } });
+        if (res.ok) { const j = await res.json(); wk = j.workspace; setAsAgency(true); }
+      } else {
+        const { data: w } = await supabase.from("workspaces").select("id,name,phase,discovery_complete").limit(1);
+        wk = w?.[0] || null;
+      }
+      setWs(wk);
       if (wk) {
         const { data: resp } = await supabase.from("onboarding_responses").select("question_key,answer").eq("workspace_id", wk.id).eq("phase", "discovery");
         const a = {}; (resp || []).forEach((r) => (a[r.question_key] = r.answer));
@@ -119,5 +132,13 @@ export default function Onboarding() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Onboarding() {
+  return (
+    <Suspense fallback={<div className="center">Loading…</div>}>
+      <OnboardingInner />
+    </Suspense>
   );
 }

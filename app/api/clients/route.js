@@ -83,13 +83,13 @@ export async function GET(req) {
   // super admin sees all; a regular teammate sees only clients they're a member of
   let workspaces;
   if (me.isSuper) {
-    const { data } = await db.from("workspaces").select("id,name,is_demo,onboarding_complete,project_lead_id,created_at").order("created_at", { ascending: false });
+    const { data } = await db.from("workspaces").select("id,name,is_demo,phase,onboarding_complete,project_lead_id,created_at").neq("phase", "prospect").order("created_at", { ascending: false });
     workspaces = data || [];
   } else {
     const { data: mem } = await db.from("memberships").select("workspace_id").eq("profile_id", me.uid);
     const ids = (mem || []).map((m) => m.workspace_id);
     if (!ids.length) { return Response.json({ clients: [], canAdd: false }); }
-    const { data } = await db.from("workspaces").select("id,name,is_demo,onboarding_complete,project_lead_id,created_at").in("id", ids).order("created_at", { ascending: false });
+    const { data } = await db.from("workspaces").select("id,name,is_demo,phase,onboarding_complete,project_lead_id,created_at").in("id", ids).neq("phase", "prospect").order("created_at", { ascending: false });
     workspaces = data || [];
   }
 

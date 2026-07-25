@@ -58,6 +58,7 @@ export default function Dashboard() {
       <nav className="nav">
         <a className="on">Dashboard</a>
         <a onClick={() => router.push("/clients")} style={{cursor:"pointer"}}>Clients</a>
+        {profile?.is_super_admin && <a onClick={() => router.push("/prospects")} style={{cursor:"pointer"}}>Prospects</a>}
         <a onClick={() => router.push("/invite")} style={{cursor:"pointer"}}>Invite teammate</a>
       </nav>
       <div className="grp">Performance</div>
