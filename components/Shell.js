@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
-export default function Shell({ profile, roleLabel, nav, children }) {
+export default function Shell({ profile, roleLabel, nav, children, banner, footer }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   async function signOut() { await supabase.auth.signOut(); router.replace("/login"); }
@@ -25,11 +25,15 @@ export default function Shell({ profile, roleLabel, nav, children }) {
         <div className="who">
           <b>{profile?.full_name || profile?.email}</b>
           {roleLabel}
-          <br /><button className="signout" onClick={signOut}>Sign out</button>
+          <br />
+          {footer ? footer : <button className="signout" onClick={signOut}>Sign out</button>}
         </div>
       </aside>
 
-      <main className="main">{children}</main>
+      <main className="main">
+        {banner}
+        {children}
+      </main>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import Shell from "../../components/Shell";
+import ClientView from "../../components/ClientView";
 
 const DEPT_LABEL = { performance: "Performance", content: "Content", analytics: "Analytics" };
 const ALL_SERVICES = [
@@ -44,6 +45,10 @@ export default function Dashboard() {
   if (loading) return <div className="center">Loading your workspace…</div>;
 
   const isAgency = profile?.side === "agency";
+  if (!isAgency) {
+    if (!workspace) return <div className="center">Your account is being set up. Please check back shortly.</div>;
+    return <ClientView workspace={workspace} services={services} profile={profile} />;
+  }
   const firstName = (profile?.full_name || profile?.email || "there").split(" ")[0].split("@")[0];
   const roleLabel = profile?.is_super_admin ? "Super admin" : isAgency ? "Team member" : "Client";
   const isProspect = !isAgency && workspace?.phase === "prospect";
