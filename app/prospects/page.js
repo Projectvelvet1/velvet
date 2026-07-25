@@ -7,6 +7,7 @@ import AgencyNav from "../../components/AgencyNav";
 import { loadAgencyDepts } from "../../lib/agencyNav";
 import Modal from "../../components/Modal";
 
+const SVC_DEPT = { paid_media:"performance", seo:"performance", aso:"performance", creative_strategy:"content", asset_production:"content", ugc:"content", tracking:"analytics", dashboarding:"analytics" };
 const CATALOG = [
   { department: "performance", group: "Performance", items: [ { key: "paid_media", label: "Paid Media" }, { key: "seo", label: "SEO" }, { key: "aso", label: "ASO" } ] },
   { department: "content", group: "Content", items: [ { key: "creative_strategy", label: "Creative Strategy" }, { key: "asset_production", label: "Asset Production" }, { key: "ugc", label: "UGC" } ] },
@@ -57,7 +58,7 @@ export default function Prospects() {
       if (prof?.side !== "agency") { router.replace("/dashboard"); return; }
       if (!prof?.is_super_admin) { router.replace("/dashboard"); return; }  // super-admin only
       setProfile(prof);
-      const { data: tm } = await supabase.from("profiles").select("id,full_name,email").eq("side","agency").order("full_name");
+      const { data: tm } = await supabase.from("profiles").select("id,full_name,email,home_department").eq("side","agency").order("full_name");
       setTeam(tm || []);
       await load(); setLoading(false);
     })();
@@ -191,10 +192,14 @@ export default function Prospects() {
                   <div key={s.service_key} style={{ margin: "8px 0", padding: "10px 12px", border: "1px solid var(--line)", borderRadius: "var(--r-sm)" }}>
                     <div className={"svc svc-" + s.service_key} style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, display: "flex", alignItems: "center" }}><span className="svc-dot" />{s.service_label}</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {team.map((p) => {
-                        const on = (cAssign[s.service_key] || []).includes(p.id);
-                        return (<button type="button" key={p.id} onClick={() => cToggleAssignee(s.service_key, p.id)} className="pill" style={{ border: "1px solid var(--line)", cursor: "pointer", background: on ? "var(--bg-accent)" : "var(--paper)", color: on ? "var(--text-accent)" : "var(--text)" }}>{on ? "✓ " : ""}{p.full_name || p.email}</button>);
-                      })}
+                      {(() => {
+                        const eligible = team.filter((p) => p.home_department === SVC_DEPT[s.service_key]);
+                        if (eligible.length === 0) return <span style={{ fontSize: 12, color: "var(--faint)" }}>No {SVC_DEPT[s.service_key]} teammates yet. Set their department on the Team page.</span>;
+                        return eligible.map((p) => {
+                          const on = (cAssign[s.service_key] || []).includes(p.id);
+                          return (<button type="button" key={p.id} onClick={() => cToggleAssignee(s.service_key, p.id)} className="pill" style={{ border: "1px solid var(--line)", cursor: "pointer", background: on ? "var(--bg-accent)" : "var(--paper)", color: on ? "var(--text-accent)" : "var(--text)" }}>{on ? "✓ " : ""}{p.full_name || p.email}</button>);
+                        });
+                      })()}
                     </div>
                   </div>
                 ))}

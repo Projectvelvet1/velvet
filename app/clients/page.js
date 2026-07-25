@@ -17,6 +17,7 @@ const CATALOG = [
 ];
 const KEY_TO_LABEL = {}; const LABEL_BY_KEY = {};
 CATALOG.forEach(g => g.items.forEach(i => { KEY_TO_LABEL[i.label] = i.key; LABEL_BY_KEY[i.key] = i.label; }));
+const SVC_DEPT = {}; CATALOG.forEach(g => g.items.forEach(i => { SVC_DEPT[i.key] = g.department; }));
 
 export default function Clients() {
   const router = useRouter();
@@ -182,8 +183,10 @@ export default function Clients() {
                       <span className="svc-dot" />{s.service_label}
                     </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {team.length === 0 ? <span style={{ fontSize: 12, color: "var(--faint)" }}>No teammates yet — invite them first.</span>
-                        : team.map((p) => {
+                      {(() => {
+                        const eligible = team.filter((p) => p.home_department === SVC_DEPT[s.service_key]);
+                        if (eligible.length === 0) return <span style={{ fontSize: 12, color: "var(--faint)" }}>No {SVC_DEPT[s.service_key]} teammates yet. Set their department on the Team page.</span>;
+                        return eligible.map((p) => {
                           const on = (assign[s.service_key] || []).includes(p.id);
                           return (
                             <button type="button" key={p.id} onClick={() => toggleAssignee(s.service_key, p.id)}
@@ -191,7 +194,8 @@ export default function Clients() {
                               {on ? "✓ " : ""}{teamName(p)}
                             </button>
                           );
-                        })}
+                        });
+                      })()}
                     </div>
                   </div>
                 ))}
