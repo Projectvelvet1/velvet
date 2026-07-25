@@ -18,6 +18,9 @@ function QuestionsInner() {
   const [rows, setRows] = useState([]);
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState("");
+  const [aiText, setAiText] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiErr, setAiErr] = useState("");
 
   async function loadRows(ph) {
     const { data } = await supabase.from("onboarding_questions").select("id,question_key,label,helper,answer_type,sort_order").eq("phase", ph).order("sort_order");
@@ -54,6 +57,19 @@ function QuestionsInner() {
     if (!res.ok) { setFlash(j.error || "Could not save"); return; }
     setRows((j.questions || []).map((r) => ({ ...r }))); setFlash("Saved.");
     setTimeout(() => setFlash(""), 5000);
+  }
+
+  async function organise() {
+    setAiErr(""); if (!aiText.trim()) { setAiErr("Paste some questions first."); return; }
+    setAiBusy(true);
+    const { data } = await supabase.auth.getSession();
+    const res = await fetch("/api/questions-ai", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ phase, text: aiText }) });
+    const j = await res.json(); setAiBusy(false);
+    if (!res.ok) { setAiErr(j.error || "Could not organise"); return; }
+    // replace the editor with the AI's set for review (not saved until you click Save)
+    setRows((j.questions || []).map((q, i) => ({ label: q.label, helper: q.helper, answer_type: q.answer_type, sort_order: i + 1 })));
+    setAiText(""); setFlash("AI organised your questions below. Review, tweak, then Save changes.");
+    setTimeout(() => setFlash(""), 8000);
   }
 
   if (loading) return <div className="center">Loading…</div>;
@@ -94,9 +110,16 @@ function QuestionsInner() {
 
       <button className="btn btn-ghost" onClick={add} style={{ marginTop: 6 }}>+ Add question</button>
 
-      <div className="card" style={{ marginTop: 22, opacity: .7 }}>
+      <div className="card" style={{ marginTop: 22, borderColor: "var(--border-accent)" }}>
         <b>Upload questions & AI summariser</b>
-        <p style={{ color: "var(--muted)", fontSize: 13, margin: "6px 0 0" }}>Coming soon: paste a rough list of questions and let AI organise them into a clean set automatically.</p>
+        <p style={{ color: "var(--muted)", fontSize: 13, margin: "6px 0 10px" }}>
+          Paste a rough list of questions and let AI organise them into a clean, ordered set. It replaces the editor above for your review — nothing is saved until you click “Save changes”.
+        </p>
+        {aiErr && <div className="auth-msg auth-err">{aiErr}</div>}
+        <textarea className="input" rows={6} value={aiText} onChange={(e) => setAiText(e.target.value)} placeholder={"Paste your questions here, one per line or however you have them…"} />
+        <div style={{ marginTop: 10 }}>
+          <button className="btn btn-primary" onClick={organise} disabled={aiBusy}>{aiBusy ? "Organising…" : "Organise with AI"}</button>
+        </div>
       </div>
     </Shell>
   );
