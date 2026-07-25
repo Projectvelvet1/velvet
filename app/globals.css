@@ -3,7 +3,7 @@
   --cloud:#F5F6F8; --paper:#FFF; --line:#E6E8EC; --line-2:#EEF0F3;
   --text:#14181F; --muted:#5B6472; --faint:#8A93A2;
   --on-dark:#FFF; --on-dark-mut:#9AA3B2; --on-dark-faint:#5A6474;
-  --gold:#F7C948; --gold-ink:#2A2205; --gold-soft:#FBEFC2; --bg-accent:#EEF0FF; --text-accent:#3B49C7; --border-accent:#F7C948;
+  --gold:#F7C948; --danger:#C0392B; --gold-ink:#2A2205; --gold-soft:#FBEFC2; --bg-accent:#EEF0FF; --text-accent:#3B49C7; --border-accent:#F7C948;
   --teal:#12A594; --cobalt:#3D4EE8;
   --grad-mark:linear-gradient(150deg,#0B1E3A,#0E2E3A 55%,#0E3B36);
   --grid:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cpath d='M60 0H0V60' fill='none' stroke='%23F7C948' stroke-opacity='0.10' stroke-width='1'/%3E%3C/svg%3E");
@@ -133,3 +133,11 @@ body.modal-open{overflow:hidden}   /* freeze background scroll */
 }
 .viewbar b{color:#4a3800}
 @media(max-width:820px){ .viewbar{padding:10px 16px;margin:-18px -16px 16px} }
+
+/* FAQ accordion for onboarding answers */
+.faq{display:flex;flex-direction:column;gap:8px}
+.faq-item{border:1px solid var(--line);border-radius:var(--r-sm);background:var(--paper);overflow:hidden}
+.faq-item.open{border-color:var(--border-accent)}
+.faq-q{width:100%;text-align:left;background:none;border:0;cursor:pointer;padding:14px 16px;font-size:14px;font-weight:600;color:var(--text);display:flex;justify-content:space-between;align-items:center;gap:10px;font-family:inherit}
+.faq-caret{color:var(--faint);font-size:18px;line-height:1}
+.faq-a{padding:0 16px 14px;font-size:14px;white-space:pre-wrap;line-height:1.5}

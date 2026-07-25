@@ -2,9 +2,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabase";
-import { DISCOVERY_STEPS } from "../../lib/onboardingQuestions";
-const STEPS = DISCOVERY_STEPS;
-
+import { loadQuestions } from "../../lib/onboardingQuestions";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +10,12 @@ function OnboardingInner() {
   const router = useRouter();
   const search = useSearchParams();
   const wsParam = search.get("ws");
-  const [asAgency, setAsAgency] = useState(false);
   const [loading, setLoading] = useState(true);
   const [ws, setWs] = useState(null);
+  const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
-  const [step, setStep] = useState(0);
+  const [phase, setPhase] = useState("discovery");
+  const [asAgency, setAsAgency] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -26,40 +25,37 @@ function OnboardingInner() {
       if (!session) { router.replace("/login"); return; }
       let wk = null;
       if (wsParam) {
-        // agency acting on a client's behalf: authorise via server, then load
         const res = await fetch(`/api/client-context?id=${wsParam}`, { headers: { Authorization: `Bearer ${session.access_token}` } });
         if (res.ok) { const j = await res.json(); wk = j.workspace; setAsAgency(true); }
       } else {
-        const { data: w } = await supabase.from("workspaces").select("id,name,phase,discovery_complete").limit(1);
+        const { data: w } = await supabase.from("workspaces").select("id,name,phase,onboarding_complete,discovery_complete").limit(1);
         wk = w?.[0] || null;
       }
       setWs(wk);
       if (wk) {
-        const { data: resp } = await supabase.from("onboarding_responses").select("question_key,answer").eq("workspace_id", wk.id).eq("phase", "discovery");
-        const a = {}; (resp || []).forEach((r) => (a[r.question_key] = r.answer));
-        setAnswers(a);
-        if (wk.discovery_complete) setDone(true);
+        const ph = wk.phase === "prospect" ? "discovery" : "full";
+        setPhase(ph);
+        const qs = await loadQuestions(ph); setQuestions(qs);
+        const { data: resp } = await supabase.from("onboarding_responses").select("question_key,answer").eq("workspace_id", wk.id).eq("phase", ph);
+        const a = {}; (resp || []).forEach((r) => (a[r.question_key] = r.answer)); setAnswers(a);
+        if ((ph === "discovery" && wk.discovery_complete) || (ph === "full" && wk.onboarding_complete)) setDone(true);
       }
       setLoading(false);
     })();
-  }, [router]);
+  }, [router, wsParam]);
 
-  const cur = STEPS[step];
-  const totalQ = STEPS.reduce((n, s) => n + s.questions.length, 0);
-  const filled = Object.values(answers).filter((v) => (v || "").trim()).length;
-  const pct = Math.round((filled / totalQ) * 100);
-  const stepComplete = cur.questions.every((q) => (answers[q.key] || "").trim());
+  const total = questions.length;
+  const filled = questions.filter((q) => (answers[q.key] || "").trim()).length;
+  const pct = total ? Math.round((filled / total) * 100) : 0;
+  const allDone = total > 0 && filled === total;
 
-  async function saveStep() {
-    if (!ws) return;
-    const rows = cur.questions.map((q) => ({ workspace_id: ws.id, phase: "discovery", question_key: q.key, answer: answers[q.key] || "", updated_at: new Date().toISOString() }));
-    await supabase.from("onboarding_responses").upsert(rows, { onConflict: "workspace_id,phase,question_key" });
-  }
-  async function next() { await saveStep(); if (step < STEPS.length - 1) setStep(step + 1); }
   async function submit() {
-    setBusy(true); await saveStep();
+    if (!ws) return;
+    setBusy(true);
+    const rows = questions.map((q) => ({ workspace_id: ws.id, phase, question_key: q.key, answer: answers[q.key] || "", updated_at: new Date().toISOString() }));
+    await supabase.from("onboarding_responses").upsert(rows, { onConflict: "workspace_id,phase,question_key" });
     const { data } = await supabase.auth.getSession();
-    await fetch("/api/onboarding-complete", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: ws.id, phase: "discovery" }) });
+    await fetch("/api/onboarding-complete", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: ws.id, phase }) });
     setBusy(false); setDone(true);
   }
 
@@ -70,8 +66,8 @@ function OnboardingInner() {
       <div className="auth-card" style={{ textAlign: "center" }}>
         <div className="auth-logo"><span className="tile"><img src="/mark.png" alt="" /></span></div>
         <h1>Thank you 🙌</h1>
-        <p style={{ color: "var(--muted)", fontSize: 14 }}>We've received your answers. Your Welcome Tomorrow team will be in touch shortly.</p>
-        <button className="btn btn-ghost" style={{ width: "100%" }} onClick={() => router.replace("/dashboard")}>Back to your space</button>
+        <p style={{ color: "var(--muted)", fontSize: 14 }}>{asAgency ? "Answers saved for this client." : "We've received your answers. Your Welcome Tomorrow team will be in touch shortly."}</p>
+        <button className="btn btn-ghost" style={{ width: "100%" }} onClick={() => router.replace(asAgency ? `/client/${ws.id}` : "/dashboard")}>{asAgency ? "Back to client" : "Back to your space"}</button>
       </div>
     </div>
   );
@@ -84,48 +80,45 @@ function OnboardingInner() {
             <span className="tile" style={{ width: 34, height: 34, borderRadius: 9 }}><img src="/mark.png" alt="" style={{ width: 22 }} /></span>
             <b>Welcome Tomorrow</b>
           </div>
-          <h1 style={{ fontSize: 26, marginTop: 14 }}>Let's get to know your business</h1>
-          <p style={{ color: "var(--on-dark-mut)", fontSize: 14 }}>A few quick questions so we can help you best.</p>
+          <h1 style={{ fontSize: 26, marginTop: 14 }}>{phase === "full" ? "Client onboarding" : "Let's get to know your business"}</h1>
+          <p style={{ color: "var(--on-dark-mut)", fontSize: 14 }}>{asAgency ? "Filling in on the client's behalf." : "A few quick questions so we can help you best."}</p>
         </div>
       </div>
 
       <div className="wrap" style={{ maxWidth: 720, marginTop: 22 }}>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>
-          <span>Step {step + 1} of {STEPS.length}</span><span>{pct}% complete</span>
+          <span>{filled} of {total} answered</span><span>{pct}% complete</span>
         </div>
         <div style={{ height: 6, background: "var(--line)", borderRadius: 999, overflow: "hidden", marginBottom: 20 }}>
           <div style={{ height: "100%", width: pct + "%", background: "var(--gold)" }} />
         </div>
 
-        <div className="card">
-          <h3 style={{ fontSize: 18 }}>{cur.title}</h3>
-          <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 2 }}>{cur.subtitle}</p>
-          {cur.questions.map((q) => (
-            <div className="field" key={q.key} style={{ marginTop: 14 }}>
-              <label>{q.label}</label>
-              {q.helper && <div style={{ fontSize: 12, color: "var(--faint)", marginBottom: 5 }}>{q.helper}</div>}
-              {q.type === "textarea"
-                ? <textarea className="input" rows={3} value={answers[q.key] || ""} onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })} placeholder="Your answer" />
-                : <input className="input" value={answers[q.key] || ""} onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })} placeholder="Your answer" />}
-            </div>
-          ))}
-        </div>
+        {total === 0 ? (
+          <div className="empty">No questions have been set up yet. Ask a super admin to add them under Edit questions.</div>
+        ) : (
+          <div className="card">
+            {questions.map((q) => (
+              <div className="field" key={q.key} style={{ marginTop: 6 }}>
+                <label>{q.label}</label>
+                {q.helper && <div style={{ fontSize: 12, color: "var(--faint)", marginBottom: 5 }}>{q.helper}</div>}
+                {q.type === "textarea"
+                  ? <textarea className="input" rows={3} value={answers[q.key] || ""} onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })} placeholder="Your answer" />
+                  : <input className="input" value={answers[q.key] || ""} onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })} placeholder="Your answer" />}
+              </div>
+            ))}
+          </div>
+        )}
 
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16 }}>
-          <button className="btn btn-ghost" disabled={step === 0} onClick={() => setStep(step - 1)}>← Previous</button>
-          {step < STEPS.length - 1
-            ? <button className="btn btn-primary" disabled={!stepComplete} onClick={next}>{stepComplete ? "Continue →" : "Complete all fields to continue"}</button>
-            : <button className="btn btn-primary" disabled={!stepComplete || busy} onClick={submit}>{busy ? "Submitting…" : "Submit"}</button>}
-        </div>
+        {total > 0 && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+            <button className="btn btn-primary" disabled={!allDone || busy} onClick={submit}>{busy ? "Submitting…" : allDone ? "Submit" : "Complete all fields to submit"}</button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 export default function Onboarding() {
-  return (
-    <Suspense fallback={<div className="center">Loading…</div>}>
-      <OnboardingInner />
-    </Suspense>
-  );
+  return (<Suspense fallback={<div className="center">Loading…</div>}><OnboardingInner /></Suspense>);
 }

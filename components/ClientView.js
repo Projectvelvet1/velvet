@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Shell from "./Shell";
 import Modal from "./Modal";
-import { questionsFlat } from "../lib/onboardingQuestions";
+import { loadQuestions } from "../lib/onboardingQuestions";
 import { supabase } from "../lib/supabase";
 
 const DEPT_LABEL = { performance: "Performance", content: "Content", analytics: "Analytics" };
@@ -23,7 +23,8 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   const grouped = {}; services.forEach((s) => { (grouped[s.department] ||= []).push(s); });
 
   // ---- onboarding answers ----
-  const flat = questionsFlat(answersPhase);
+  const [flat, setFlat] = useState([]);
+  const [openKey, setOpenKey] = useState(null);
   const [answers, setAnswers] = useState({});
   const [hasAny, setHasAny] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
@@ -33,6 +34,7 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   useEffect(() => {
     (async () => {
       if (!workspace?.id) return;
+      const qs = await loadQuestions(answersPhase); setFlat(qs);
       const { data } = await supabase.from("onboarding_responses").select("question_key,answer").eq("workspace_id", workspace.id).eq("phase", answersPhase);
       const a = {}; (data || []).forEach((r) => (a[r.question_key] = r.answer));
       setAnswers(a); setHasAny((data || []).some((r) => (r.answer || "").trim()));
@@ -93,19 +95,31 @@ export default function ClientView({ workspace, services = [], profile, viewingA
     <>
       <div className="page-head" style={{ marginTop: 26, marginBottom: 10 }}>
         <h3 style={{ fontSize: 16 }}>Onboarding answers</h3>
-        <button className="btn btn-ghost" onClick={openEdit}>{hasAny ? "Edit answers" : "Fill in answers"}</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {viewingAs && <button className="btn btn-ghost" onClick={() => router.push(`/questions?phase=${answersPhase}`)}>Edit questions</button>}
+          <button className="btn btn-ghost" onClick={openEdit}>{hasAny ? "Edit answers" : "Fill in answers"}</button>
+        </div>
       </div>
-      {!hasAny ? (
-        <div className="empty">No answers yet. {viewingAs ? "Use “Edit answers” to fill them in on the client's behalf." : "Complete your onboarding to add them."}</div>
+      {flat.length === 0 ? (
+        <div className="empty">No questions have been set up yet.{viewingAs ? " Use “Edit questions” to add them." : ""}</div>
       ) : (
-        flat.map((q) => (
-          <div className="card" key={q.key} style={{ marginBottom: 8 }}>
-            <div style={{ fontSize: 12, color: "var(--faint)", textTransform: "uppercase", letterSpacing: ".06em" }}>{q.label}</div>
-            <div style={{ marginTop: 4, whiteSpace: "pre-wrap", color: (answers[q.key] || "").trim() ? "var(--text)" : "var(--faint)" }}>
-              {(answers[q.key] || "").trim() || "—"}
-            </div>
-          </div>
-        ))
+        <div className="faq">
+          {flat.map((q) => {
+            const open = openKey === q.key;
+            const ans = (answers[q.key] || "").trim();
+            return (
+              <div className={"faq-item" + (open ? " open" : "")} key={q.key}>
+                <button type="button" className="faq-q" onClick={() => setOpenKey(open ? null : q.key)}>
+                  <span>{q.label}</span>
+                  <span className="faq-caret">{open ? "–" : "+"}</span>
+                </button>
+                {open && (
+                  <div className="faq-a" style={{ color: ans ? "var(--text)" : "var(--faint)" }}>{ans || "No answer yet."}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
     </>
   );
