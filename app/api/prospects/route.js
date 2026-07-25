@@ -19,19 +19,22 @@ export async function POST(req) {
   let body; try { body = await req.json(); } catch { return Response.json({ error: "Bad request" }, { status: 400 }); }
   const name = (body?.name || "").trim();
   const email = (body?.email || "").trim().toLowerCase();
+  const website = (body?.website || "").trim();
+  const industry = (body?.industry || "").trim();
+  const leadName = (body?.leadName || "").trim();
   if (!name) return Response.json({ error: "Prospect name is required" }, { status: 400 });
   if (!email || !email.includes("@")) return Response.json({ error: "A valid email is required" }, { status: 400 });
 
   const db = admin();
   // create a prospect-phase workspace
   const { data: ws, error: e1 } = await db.from("workspaces")
-    .insert({ name, is_demo: true, phase: "prospect" }).select("id,name").single();
+    .insert({ name, is_demo: true, phase: "prospect", website: website || null, industry: industry || null, lead_name: leadName || null }).select("id,name").single();
   if (e1) return Response.json({ error: e1.message }, { status: 500 });
 
   // invite the prospect (they log in to protect their data)
   const origin = req.headers.get("origin") || `https://${req.headers.get("host")}`;
   let pid = null;
-  const { data: inv } = await db.auth.admin.inviteUserByEmail(email, { redirectTo: `${origin}/set-password` });
+  const { data: inv } = await db.auth.admin.inviteUserByEmail(email, { data: { full_name: leadName }, redirectTo: `${origin}/set-password` });
   pid = inv?.user?.id || null;
   if (!pid) { const { data: ex } = await db.from("profiles").select("id").eq("email", email).single(); pid = ex?.id || null; }
   if (pid) {

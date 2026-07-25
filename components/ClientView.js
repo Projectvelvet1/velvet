@@ -30,7 +30,12 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   const [showEdit, setShowEdit] = useState(false);
   const [draft, setDraft] = useState({});
   const [saving, setSaving] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [dDraft, setDDraft] = useState({});
+  const [dBusy, setDBusy] = useState(false);
+  const [wsLocal, setWsLocal] = useState(workspace);
 
+  useEffect(() => { setWsLocal(workspace); }, [workspace]);
   useEffect(() => {
     (async () => {
       if (!workspace?.id) return;
@@ -47,6 +52,15 @@ export default function ClientView({ workspace, services = [], profile, viewingA
     const rows = flat.map((q) => ({ workspace_id: workspace.id, phase: answersPhase, question_key: q.key, answer: draft[q.key] || "", updated_at: new Date().toISOString() }));
     await supabase.from("onboarding_responses").upsert(rows, { onConflict: "workspace_id,phase,question_key" });
     setAnswers({ ...draft }); setHasAny(Object.values(draft).some((v) => (v || "").trim())); setSaving(false); setShowEdit(false);
+  }
+
+  function openDetails() { setDDraft({ website: wsLocal.website || "", industry: wsLocal.industry || "", startDate: wsLocal.start_date || "", leadName: wsLocal.lead_name || "", leadEmail: "" }); setShowDetails(true); }
+  async function saveDetails(e) {
+    e.preventDefault(); setDBusy(true);
+    const { data } = await supabase.auth.getSession();
+    const res = await fetch("/api/client-details", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: wsLocal.id, ...dDraft }) });
+    setDBusy(false);
+    if (res.ok) { setWsLocal({ ...wsLocal, website: dDraft.website, industry: dDraft.industry, start_date: dDraft.startDate, lead_name: dDraft.leadName }); setShowDetails(false); }
   }
 
   // ---- sidebar ----
@@ -127,9 +141,24 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   return (
     <Shell profile={shellProfile} roleLabel={viewingAs ? "Client view" : "Client"} nav={nav} banner={banner} footer={footer}>
       <div className="page-head">
-        <h1 style={{ fontSize: 24 }}>{viewingAs ? workspace.name : `Welcome, ${firstName}`}</h1>
+        <h1 style={{ fontSize: 24 }}>{viewingAs ? wsLocal.name : `Welcome, ${firstName}`}</h1>
         <span className="pill p-client">{isProspect ? "Discovery" : "Client"}</span>
       </div>
+
+      {viewingAs && (
+        <div className="card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <b>Client details</b>
+            <button className="btn btn-ghost" style={{ padding: "5px 10px" }} onClick={openDetails}>Edit details</button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 10, marginTop: 10, fontSize: 13 }}>
+            <div><div style={{ color: "var(--faint)", fontSize: 12 }}>Website</div>{wsLocal.website || "—"}</div>
+            <div><div style={{ color: "var(--faint)", fontSize: 12 }}>Industry</div>{wsLocal.industry || "—"}</div>
+            <div><div style={{ color: "var(--faint)", fontSize: 12 }}>Start date</div>{wsLocal.start_date || "—"}</div>
+            <div><div style={{ color: "var(--faint)", fontSize: 12 }}>Client lead</div>{wsLocal.lead_name || "—"}</div>
+          </div>
+        </div>
+      )}
 
       {isProspect ? (
         <>
@@ -185,6 +214,19 @@ export default function ClientView({ workspace, services = [], profile, viewingA
             </div>
           ))}
         </>
+      )}
+
+      {showDetails && (
+        <Modal title="Edit client details" onClose={() => setShowDetails(false)}>
+          <form onSubmit={saveDetails}>
+            <div className="field"><label>Website</label><input className="input" value={dDraft.website} onChange={(e) => setDDraft({ ...dDraft, website: e.target.value })} placeholder="acme.com" /></div>
+            <div className="field"><label>Industry</label><input className="input" value={dDraft.industry} onChange={(e) => setDDraft({ ...dDraft, industry: e.target.value })} placeholder="e.g. Fintech" /></div>
+            <div className="field"><label>Start date</label><input className="input" type="date" value={dDraft.startDate || ""} onChange={(e) => setDDraft({ ...dDraft, startDate: e.target.value })} /></div>
+            <div className="field"><label>Client lead name</label><input className="input" value={dDraft.leadName} onChange={(e) => setDDraft({ ...dDraft, leadName: e.target.value })} placeholder="Full name" /></div>
+            <div className="field"><label>Change client lead email (optional)</label><input className="input" type="email" value={dDraft.leadEmail} onChange={(e) => setDDraft({ ...dDraft, leadEmail: e.target.value })} placeholder="leave blank to keep current" /></div>
+            <button className="btn btn-primary" disabled={dBusy}>{dBusy ? "Saving…" : "Save details"}</button>
+          </form>
+        </Modal>
       )}
 
       {showEdit && (

@@ -23,6 +23,9 @@ export default function Prospects() {
   const [show, setShow] = useState(false);
   const [pName, setPName] = useState("");
   const [pEmail, setPEmail] = useState("");
+  const [pWebsite, setPWebsite] = useState("");
+  const [pIndustry, setPIndustry] = useState("");
+  const [pLeadName, setPLeadName] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [link, setLink] = useState("");
@@ -34,6 +37,9 @@ export default function Prospects() {
   const [cAssign, setCAssign] = useState({});
   const [cBusy, setCBusy] = useState(false);
   const [cErr, setCErr] = useState("");
+  const [cStart, setCStart] = useState("");
+  const [cLeadEmail, setCLeadEmail] = useState("");
+  const [cLeadName, setCLeadName] = useState("");
 
   async function token() { const { data } = await supabase.auth.getSession(); return data.session?.access_token; }
   async function load() {
@@ -57,18 +63,18 @@ export default function Prospects() {
     })();
   }, [router]);
 
-  function openModal() { setPName(""); setPEmail(""); setErr(""); setLink(""); setShow(true); }
+  function openModal() { setPName(""); setPEmail(""); setPWebsite(""); setPIndustry(""); setPLeadName(""); setErr(""); setLink(""); setShow(true); }
   async function add(e) {
     e.preventDefault(); setBusy(true); setErr("");
     const t = await token();
-    const res = await fetch("/api/prospects", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify({ name: pName, email: pEmail }) });
+    const res = await fetch("/api/prospects", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify({ name: pName, email: pEmail, website: pWebsite, industry: pIndustry, leadName: pLeadName }) });
     const j = await res.json(); setBusy(false);
     if (!res.ok) { setErr(j.error || "Could not add prospect"); return; }
     setLink(j.loginLink || ""); setFlash(`Prospect "${j.client.name}" invited at ${j.invited}.`);
     load(); setTimeout(() => setFlash(""), 8000);
   }
 
-  function openConvert(pr) { setConv(pr); setCLead(""); setCPicked({}); setCAssign({}); setCErr(""); }
+  function openConvert(pr) { setConv(pr); setCLead(""); setCPicked({}); setCAssign({}); setCErr(""); setCStart(""); setCLeadEmail(""); setCLeadName(""); }
   function cToggleSvc(dep, it) { setCPicked((p) => { const n = { ...p }; if (n[it.key]) { delete n[it.key]; setCAssign((a)=>{const b={...a}; delete b[it.key]; return b;}); } else n[it.key] = { department: dep, service_key: it.key, service_label: it.label }; return n; }); }
   function cToggleAssignee(sk, pid) { setCAssign((a) => { const cur = new Set(a[sk] || []); cur.has(pid) ? cur.delete(pid) : cur.add(pid); return { ...a, [sk]: [...cur] }; }); }
   async function doConvert(e) {
@@ -78,7 +84,7 @@ export default function Prospects() {
     const teamAssignments = [];
     Object.entries(cAssign).forEach(([sk, ids]) => ids.forEach((pid) => teamAssignments.push({ profile_id: pid, service_key: sk })));
     const t = await token();
-    const res = await fetch("/api/convert", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify({ workspaceId: conv.id, projectLeadId: cLead, services: Object.values(cPicked), teamAssignments }) });
+    const res = await fetch("/api/convert", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify({ workspaceId: conv.id, projectLeadId: cLead, services: Object.values(cPicked), teamAssignments, startDate: cStart, leadEmail: cLeadEmail, leadName: cLeadName }) });
     const j = await res.json(); setCBusy(false);
     if (!res.ok) { setCErr(j.error || "Could not convert"); return; }
     setConv(null); setFlash(`"${j.client.name}" is now a client.`); load(); setTimeout(() => setFlash(""), 6000);
@@ -126,6 +132,12 @@ export default function Prospects() {
                 <input className="input" value={pName} onChange={(e) => setPName(e.target.value)} placeholder="e.g. Acme Bank" required /></div>
               <div className="field"><label>Their email (gets the invite)</label>
                 <input className="input" type="email" value={pEmail} onChange={(e) => setPEmail(e.target.value)} placeholder="contact@acme.com" required /></div>
+              <div className="field"><label>Client lead name</label>
+                <input className="input" value={pLeadName} onChange={(e) => setPLeadName(e.target.value)} placeholder="Full name" /></div>
+              <div className="field"><label>Website</label>
+                <input className="input" value={pWebsite} onChange={(e) => setPWebsite(e.target.value)} placeholder="acme.com" /></div>
+              <div className="field"><label>Industry</label>
+                <input className="input" value={pIndustry} onChange={(e) => setPIndustry(e.target.value)} placeholder="e.g. Fintech" /></div>
               <button className="btn btn-primary" disabled={busy}>{busy ? "Inviting…" : "Invite prospect"}</button>
             </form>
           ) : (
@@ -151,6 +163,12 @@ export default function Prospects() {
                 {team.map((p) => <option key={p.id} value={p.id}>{p.full_name || p.email}</option>)}
               </select>
             </div>
+            <div className="field"><label>Start date</label>
+              <input className="input" type="date" value={cStart} onChange={(e) => setCStart(e.target.value)} /></div>
+            <div className="field"><label>Client lead email (leave blank to keep current)</label>
+              <input className="input" type="email" value={cLeadEmail} onChange={(e) => setCLeadEmail(e.target.value)} placeholder="lead@client.com" /></div>
+            <div className="field"><label>Client lead name</label>
+              <input className="input" value={cLeadName} onChange={(e) => setCLeadName(e.target.value)} placeholder="Full name" /></div>
             <div className="field"><label>Services they signed for</label>
               {CATALOG.map((g) => (
                 <div key={g.group} style={{ marginBottom: 8 }}>
