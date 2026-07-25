@@ -2,22 +2,9 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabase";
+import { DISCOVERY_STEPS } from "../../lib/onboardingQuestions";
+const STEPS = DISCOVERY_STEPS;
 
-// PLACEHOLDER discovery questions. Swap in the real questionnaire later.
-const STEPS = [
-  { title: "Your business", subtitle: "The basics so we understand you.", questions: [
-    { key: "company_name", label: "Company name", helper: "Your brand as customers know it." },
-    { key: "what_you_do", label: "What does your business do?", type: "textarea", helper: "A sentence or two is fine." },
-  ]},
-  { title: "Your challenges", subtitle: "Where it hurts right now.", questions: [
-    { key: "main_problem", label: "Your single biggest marketing challenge right now?", type: "textarea" },
-    { key: "tried_before", label: "What have you already tried?", type: "textarea" },
-  ]},
-  { title: "Where you want to go", subtitle: "What good looks like.", questions: [
-    { key: "goal_6m", label: "What would success look like in 6 months?", type: "textarea" },
-    { key: "timeline", label: "When would you like to start?" },
-  ]},
-];
 
 export const dynamic = "force-dynamic";
 

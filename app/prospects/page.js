@@ -108,6 +108,7 @@ export default function Prospects() {
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button className="btn btn-ghost" onClick={() => router.push(`/client/${p.id}`)}>Open (view as)</button>
+              <button className="btn btn-ghost" onClick={() => router.push(`/client/${p.id}`)}>Onboarding answers</button>
               <button className="btn btn-primary" onClick={() => openConvert(p)}>Convert to client</button>
             </div>
           </div>
