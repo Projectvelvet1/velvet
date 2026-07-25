@@ -34,6 +34,13 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   const [dDraft, setDDraft] = useState({});
   const [dBusy, setDBusy] = useState(false);
   const [wsLocal, setWsLocal] = useState(workspace);
+  const [fbQs, setFbQs] = useState([]);
+  const [showFb, setShowFb] = useState(false);
+  const [fbScores, setFbScores] = useState({});
+  const [fbOverall, setFbOverall] = useState(0);
+  const [fbAns, setFbAns] = useState({});
+  const [fbBusy, setFbBusy] = useState(false);
+  const [fbDone, setFbDone] = useState(false);
 
   useEffect(() => { setWsLocal(workspace); }, [workspace]);
   useEffect(() => {
@@ -43,6 +50,10 @@ export default function ClientView({ workspace, services = [], profile, viewingA
       const { data } = await supabase.from("onboarding_responses").select("question_key,answer").eq("workspace_id", workspace.id).eq("phase", answersPhase);
       const a = {}; (data || []).forEach((r) => (a[r.question_key] = r.answer));
       setAnswers(a); setHasAny((data || []).some((r) => (r.answer || "").trim()));
+      if (!viewingAs && !isProspect) {
+        const { data: fq } = await supabase.from("feedback_questions").select("question_key,label,sort_order").order("sort_order");
+        setFbQs(fq || []);
+      }
     })();
   }, [workspace?.id, answersPhase]);
 
@@ -61,6 +72,20 @@ export default function ClientView({ workspace, services = [], profile, viewingA
     const res = await fetch("/api/client-details", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: wsLocal.id, ...dDraft }) });
     setDBusy(false);
     if (res.ok) { setWsLocal({ ...wsLocal, website: dDraft.website, industry: dDraft.industry, start_date: dDraft.startDate, lead_name: dDraft.leadName }); setShowDetails(false); }
+  }
+
+  function openFb() { setFbScores({}); setFbOverall(0); setFbAns({}); setFbDone(false); setShowFb(true); }
+  async function sendFeedback(e) {
+    e.preventDefault(); setFbBusy(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data: sub } = await supabase.from("feedback_submissions").insert({ workspace_id: workspace.id, submitted_by: session?.user?.id || null, overall_score: fbOverall || null }).select("id").single();
+    if (sub?.id) {
+      const scoreRows = services.map((s) => ({ submission_id: sub.id, service_key: s.service_key, score: fbScores[s.service_key] || null }));
+      if (scoreRows.length) await supabase.from("feedback_service_scores").insert(scoreRows);
+      const ansRows = fbQs.map((q) => ({ submission_id: sub.id, question_key: q.question_key, answer: fbAns[q.question_key] || "" }));
+      if (ansRows.length) await supabase.from("feedback_answers").insert(ansRows);
+    }
+    setFbBusy(false); setFbDone(true);
   }
 
   // ---- sidebar ----
@@ -145,6 +170,15 @@ export default function ClientView({ workspace, services = [], profile, viewingA
         <span className="pill p-client">{isProspect ? "Discovery" : "Client"}</span>
       </div>
 
+      {!viewingAs && !isProspect && (
+        <div className="card" style={{ borderColor: "var(--border-accent)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <div><b>How are we doing?</b><div style={{ color: "var(--muted)", fontSize: 13, marginTop: 2 }}>Share your feedback on the services we deliver.</div></div>
+            <button className="btn btn-primary" onClick={openFb}>Give feedback</button>
+          </div>
+        </div>
+      )}
+
       {viewingAs && (
         <div className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -214,6 +248,41 @@ export default function ClientView({ workspace, services = [], profile, viewingA
             </div>
           ))}
         </>
+      )}
+
+      {showFb && (
+        <Modal title="Your feedback" onClose={() => setShowFb(false)}>
+          {fbDone ? (
+            <>
+              <div className="auth-msg auth-ok">Thank you! Your feedback has been sent.</div>
+              <button className="btn btn-primary" onClick={() => setShowFb(false)}>Done</button>
+            </>
+          ) : (
+            <form onSubmit={sendFeedback}>
+              <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 0 }}>Rate each service from 1 (lowest) to 10 (highest).</p>
+              {services.map((s) => (
+                <div className="field" key={s.service_key}>
+                  <label>{s.service_label}</label>
+                  <select className="input" value={fbScores[s.service_key] || ""} onChange={(e) => setFbScores({ ...fbScores, [s.service_key]: Number(e.target.value) })} required>
+                    <option value="">Choose 1–10…</option>
+                    {[1,2,3,4,5,6,7,8,9,10].map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+              ))}
+              <div className="field"><label>Overall rating</label>
+                <select className="input" value={fbOverall || ""} onChange={(e) => setFbOverall(Number(e.target.value))} required>
+                  <option value="">Choose 1–10…</option>
+                  {[1,2,3,4,5,6,7,8,9,10].map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              {fbQs.map((q) => (
+                <div className="field" key={q.question_key}><label>{q.label}</label>
+                  <textarea className="input" rows={3} value={fbAns[q.question_key] || ""} onChange={(e) => setFbAns({ ...fbAns, [q.question_key]: e.target.value })} /></div>
+              ))}
+              <button className="btn btn-primary" disabled={fbBusy}>{fbBusy ? "Sending…" : "Send feedback"}</button>
+            </form>
+          )}
+        </Modal>
       )}
 
       {showDetails && (
