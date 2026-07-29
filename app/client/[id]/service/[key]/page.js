@@ -16,6 +16,13 @@ const DEMO_ITEMS = [
   { t: "Backlink cleanup", s: "Needs another look", bg: "#FDEBD3", fg: "#B4640C" },
 ];
 const DEMO_COMPARE = { traffic: "128k", kw: "1,240", bl: "64k" };
+const STATUS = {
+  todo: { label: "To do", bg: "#EEF0FF", fg: "#3B49C7" },
+  in_progress: { label: "In progress", bg: "#FFF3D6", fg: "#9A6B00" },
+  delivered: { label: "Delivered", bg: "#E7F0FF", fg: "#2557C7" },
+  reviewed: { label: "Reviewed", bg: "#E4F6EC", fg: "#177E4E" },
+  needs_look: { label: "Needs another look", bg: "#FDEBD3", fg: "#B4640C" },
+};
 
 export default function ClientServiceDashboard() {
   const router = useRouter();
@@ -30,6 +37,9 @@ export default function ClientServiceDashboard() {
   const [newComp, setNewComp] = useState("");
   const [showCompare, setShowCompare] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
+  const [uid, setUid] = useState(null);
+  const [tasks, setTasks] = useState([]);
+  const [newTask, setNewTask] = useState("");
   const svc = DEPARTMENTS.flatMap((d) => d.services).find((s) => s.key === key);
   const isSeo = key === "seo";
 
@@ -56,7 +66,9 @@ export default function ClientServiceDashboard() {
       const ids = [...new Set((asg || []).map((a) => a.profile_id))];
       const { data: profs } = ids.length ? await supabase.from("profiles").select("id,full_name,email").in("id", ids) : { data: [] };
       setMembers(profs || []);
+      setUid(uid);
       await loadComps();
+      await loadTasks();
       setLoading(false);
     })();
   }, [router, id, key]);
@@ -70,6 +82,24 @@ export default function ClientServiceDashboard() {
   async function removeComp(cid) {
     await supabase.from("competitors").delete().eq("id", cid);
     loadComps();
+  }
+
+  async function loadTasks() {
+    const { data } = await supabase.from("tasks").select("id,title,status,assignee_id,client_note,created_at").eq("workspace_id", id).eq("service_key", key).order("created_at", { ascending: true });
+    setTasks(data || []);
+  }
+  async function addTask(e) {
+    e.preventDefault(); const title = newTask.trim(); if (!title) return;
+    const { error } = await supabase.from("tasks").insert({ workspace_id: id, service_key: key, title, status: "todo", assignee_id: uid, created_by: uid });
+    if (!error) { setNewTask(""); loadTasks(); }
+  }
+  async function setStatus(taskId, status) {
+    await supabase.from("tasks").update({ status, updated_at: new Date().toISOString() }).eq("id", taskId);
+    loadTasks();
+  }
+  async function delTask(taskId) {
+    await supabase.from("tasks").delete().eq("id", taskId);
+    loadTasks();
   }
 
   if (loading) return <div className="center">Loading…</div>;
@@ -140,18 +170,53 @@ export default function ClientServiceDashboard() {
       <div className="empty" style={{ marginTop: 14 }}>The live {svc?.label || "service"} numbers, LLM visibility and the comparison connect to real Ahrefs / GSC data in a later step. This frame is on demo data; the competitors list above is real.</div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <b>Tasks &amp; brand docs</b>
-        <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 6 }}>The team's tasks for this client and the client's brand documents arrive with the Customer Action Plan and document library (next builds).</div>
+        <b>{svc?.label} tasks for {ws?.name}</b>
+        <div style={{ fontSize: 12, color: "var(--faint)", margin: "2px 0 10px" }}>The team's action plan for this client. Move items To do → In progress → Delivered.</div>
+        <form onSubmit={addTask} style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <input className="input" style={{ flex: 1 }} value={newTask} onChange={(e) => setNewTask(e.target.value)} placeholder="Add a task (e.g. Fix title tags on /promotions)" />
+          <button className="btn btn-ghost">Add task</button>
+        </form>
+        {tasks.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>No tasks yet.</div>
+          : tasks.map((t) => {
+            const st = STATUS[t.status] || STATUS.todo;
+            return (
+              <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 0", borderTop: "0.5px solid var(--line)" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13 }}>{t.title}</div>
+                  {t.status === "needs_look" && t.client_note && <div style={{ fontSize: 11, color: "#B4640C", marginTop: 2 }}>Client: {t.client_note}</div>}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
+                  <span className="pill" style={{ background: st.bg, color: st.fg }}>{st.label}</span>
+                  <select className="input" style={{ padding: "4px 8px", width: "auto" }} value={["todo","in_progress","delivered"].includes(t.status) ? t.status : ""} onChange={(e) => setStatus(t.id, e.target.value)}>
+                    {!["todo","in_progress","delivered"].includes(t.status) && <option value="">move…</option>}
+                    <option value="todo">To do</option>
+                    <option value="in_progress">In progress</option>
+                    <option value="delivered">Delivered</option>
+                  </select>
+                  <span style={{ cursor: "pointer", color: "var(--faint)" }} onClick={() => delTask(t.id)}>✕</span>
+                </div>
+              </div>
+            );
+          })}
+      </div>
+
+      <div className="card" style={{ marginTop: 12 }}>
+        <b>Brand &amp; knowledge hub</b>
+        <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 6 }}>The client's brand documents arrive with the document library (a later build).</div>
       </div>
 
       {member && (
         <Modal title={`${member.full_name || member.email} — current work`} onClose={() => setMember(null)}>
-          <div className="empty" style={{ marginBottom: 10 }}>Read-only view of what {(member.full_name || member.email).split(" ")[0]} sees for {ws?.name}. <span className="pill p-agency">demo</span></div>
-          {DEMO_ITEMS.map((it) => (
-            <div key={it.t} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderTop: "0.5px solid var(--line)" }}>
-              <span style={{ fontSize: 13 }}>{it.t}</span><span className="pill" style={{ background: it.bg, color: it.fg }}>{it.s}</span>
-            </div>
-          ))}
+          <div className="empty" style={{ marginBottom: 10 }}>What {(member.full_name || member.email).split(" ")[0]} is working on for {ws?.name}.</div>
+          {(() => {
+            const theirs = tasks.filter((t) => t.assignee_id === member.id);
+            if (theirs.length === 0) return <div style={{ fontSize: 13, color: "var(--faint)" }}>No tasks assigned to them yet.</div>;
+            return theirs.map((t) => {
+              const st = STATUS[t.status] || STATUS.todo;
+              return (<div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderTop: "0.5px solid var(--line)" }}>
+                <span style={{ fontSize: 13 }}>{t.title}</span><span className="pill" style={{ background: st.bg, color: st.fg }}>{st.label}</span></div>);
+            });
+          })()}
         </Modal>
       )}
 
