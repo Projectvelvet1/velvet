@@ -20,7 +20,7 @@ export async function GET(req) {
   if (prof?.side !== "agency") return Response.json({ error: "Not allowed" }, { status: 403 });
 
   const db = admin();
-  const { data: ws } = await db.from("workspaces").select("id,name,phase,onboarding_complete,discovery_complete,project_lead_id,website,industry,start_date,lead_name").eq("id", id).single();
+  const { data: ws } = await db.from("workspaces").select("id,name,phase,onboarding_complete,discovery_complete,project_lead_id,website,industry,start_date,lead_name,health,upsell,notes").eq("id", id).single();
   if (!ws) return Response.json({ error: "Client not found" }, { status: 404 });
 
   const allowed = prof.is_super_admin || ws.project_lead_id === user.id;

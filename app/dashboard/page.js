@@ -23,6 +23,7 @@ export default function Dashboard() {
   const [seesAll, setSeesAll] = useState(false);
   const [editMeta, setEditMeta] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [metaErr, setMetaErr] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -62,13 +63,14 @@ export default function Dashboard() {
     })();
   }, [router]);
 
-  function openMeta(c) { setEditMeta({ id: c.id, name: c.name, health: c.health || "healthy", upsell: c.upsell || "", notes: c.notes || "" }); }
+  function openMeta(c) { setMetaErr(""); setEditMeta({ id: c.id, name: c.name, health: c.health || "healthy", upsell: c.upsell || "", notes: c.notes || "" }); }
   async function saveMeta(e) {
     e.preventDefault(); setBusy(true);
     const { data } = await supabase.auth.getSession();
     const res = await fetch("/api/client-details", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: editMeta.id, health: editMeta.health, upsell: editMeta.upsell, notes: editMeta.notes }) });
     setBusy(false);
-    if (res.ok) { setRichClients((cs) => cs.map((c) => c.id === editMeta.id ? { ...c, health: editMeta.health, upsell: editMeta.upsell, notes: editMeta.notes } : c)); setEditMeta(null); }
+    if (!res.ok) { const j = await res.json().catch(() => ({})); setMetaErr(j.error || "Could not save. Please try again."); return; }
+    setMetaErr(""); setRichClients((cs) => cs.map((c) => c.id === editMeta.id ? { ...c, health: editMeta.health, upsell: editMeta.upsell, notes: editMeta.notes } : c)); setEditMeta(null);
   }
 
   if (loading) return <div className="center">Loading your workspace…</div>;
@@ -162,6 +164,7 @@ export default function Dashboard() {
               <textarea className="input" rows={2} value={editMeta.upsell} onChange={(e) => setEditMeta({ ...editMeta, upsell: e.target.value })} placeholder="e.g. Creative Strategy retainer" /></div>
             <div className="field"><label>Notes</label>
               <textarea className="input" rows={3} value={editMeta.notes} onChange={(e) => setEditMeta({ ...editMeta, notes: e.target.value })} placeholder="Internal notes about this client" /></div>
+            {metaErr && <div className="auth-msg auth-err">{metaErr}</div>}
             <button className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
           </form>
         </Modal>

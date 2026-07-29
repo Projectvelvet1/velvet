@@ -53,10 +53,12 @@ function OnboardingInner() {
   async function submit() {
     if (!ws) return;
     setBusy(true);
-    const rows = questions.map((q) => ({ workspace_id: ws.id, phase, question_key: q.key, answer: answers[q.key] || "", updated_at: new Date().toISOString() }));
-    await supabase.from("onboarding_responses").upsert(rows, { onConflict: "workspace_id,phase,question_key" });
+    const answersMap = {}; questions.forEach((q) => { answersMap[q.key] = answers[q.key] || ""; });
     const { data } = await supabase.auth.getSession();
-    const res = await fetch("/api/onboarding-complete", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: ws.id, phase }) });
+    const tok = data.session?.access_token;
+    const saveRes = await fetch("/api/onboarding-save", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` }, body: JSON.stringify({ workspaceId: ws.id, phase, answers: answersMap }) });
+    if (!saveRes.ok) { const j = await saveRes.json().catch(() => ({})); setBusy(false); setErr(j.error || "Could not save your answers. Please try again."); return; }
+    const res = await fetch("/api/onboarding-complete", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` }, body: JSON.stringify({ workspaceId: ws.id, phase }) });
     setBusy(false);
     if (!res.ok) { const j = await res.json().catch(() => ({})); setErr(j.error || "We saved your answers but couldn't finish. Please click Submit again."); return; }
     setErr(""); setDone(true);

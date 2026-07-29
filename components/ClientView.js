@@ -33,6 +33,7 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   const [showDetails, setShowDetails] = useState(false);
   const [dDraft, setDDraft] = useState({});
   const [dBusy, setDBusy] = useState(false);
+  const [dErr, setDErr] = useState("");
   const [wsLocal, setWsLocal] = useState(workspace);
   const [fbQs, setFbQs] = useState([]);
   const [showFb, setShowFb] = useState(false);
@@ -65,13 +66,14 @@ export default function ClientView({ workspace, services = [], profile, viewingA
     setAnswers({ ...draft }); setHasAny(Object.values(draft).some((v) => (v || "").trim())); setSaving(false); setShowEdit(false);
   }
 
-  function openDetails() { setDDraft({ website: wsLocal.website || "", industry: wsLocal.industry || "", startDate: wsLocal.start_date || "", leadName: wsLocal.lead_name || "", leadEmail: "" }); setShowDetails(true); }
+  function openDetails() { setDErr(""); setDDraft({ website: wsLocal.website || "", industry: wsLocal.industry || "", startDate: wsLocal.start_date || "", leadName: wsLocal.lead_name || "", leadEmail: "" }); setShowDetails(true); }
   async function saveDetails(e) {
     e.preventDefault(); setDBusy(true);
     const { data } = await supabase.auth.getSession();
     const res = await fetch("/api/client-details", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: wsLocal.id, ...dDraft }) });
     setDBusy(false);
-    if (res.ok) { setWsLocal({ ...wsLocal, website: dDraft.website, industry: dDraft.industry, start_date: dDraft.startDate, lead_name: dDraft.leadName }); setShowDetails(false); }
+    if (!res.ok) { const j = await res.json().catch(() => ({})); setDErr(j.error || "Could not save. Please try again."); return; }
+    setDErr(""); setWsLocal({ ...wsLocal, website: dDraft.website, industry: dDraft.industry, start_date: dDraft.startDate, lead_name: dDraft.leadName }); setShowDetails(false);
   }
 
   function openFb() { setFbScores({}); setFbOverall(0); setFbAns({}); setFbDone(false); setShowFb(true); }
@@ -293,6 +295,7 @@ export default function ClientView({ workspace, services = [], profile, viewingA
             <div className="field"><label>Start date</label><input className="input" type="date" value={dDraft.startDate || ""} onChange={(e) => setDDraft({ ...dDraft, startDate: e.target.value })} /></div>
             <div className="field"><label>Client lead name</label><input className="input" value={dDraft.leadName} onChange={(e) => setDDraft({ ...dDraft, leadName: e.target.value })} placeholder="Full name" /></div>
             <div className="field"><label>Change client lead email (optional)</label><input className="input" type="email" value={dDraft.leadEmail} onChange={(e) => setDDraft({ ...dDraft, leadEmail: e.target.value })} placeholder="leave blank to keep current" /></div>
+            {dErr && <div className="auth-msg auth-err">{dErr}</div>}
             <button className="btn btn-primary" disabled={dBusy}>{dBusy ? "Saving…" : "Save details"}</button>
           </form>
         </Modal>
