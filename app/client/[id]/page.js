@@ -16,10 +16,16 @@ export default function ClientMirror() {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.replace("/login"); return; }
-      const res = await fetch(`/api/client-context?id=${id}`, { headers: { Authorization: `Bearer ${session.access_token}` } });
-      const j = await res.json();
-      if (!res.ok) { setError(j.error || "Not allowed"); setLoading(false); return; }
-      setWs(j.workspace); setServices(j.services || []); setLoading(false);
+      // read the client record directly in the browser (RLS lets a super admin,
+      // the project lead, or an assigned member see it). No API route in the path.
+      const { data: w, error: wErr } = await supabase.from("workspaces")
+        .select("id,name,phase,onboarding_complete,discovery_complete,project_lead_id,website,industry,start_date,lead_name,health,upsell,notes")
+        .eq("id", id).single();
+      if (wErr || !w) { setError("This client couldn't be loaded, or you don't have access."); setLoading(false); return; }
+      setWs(w);
+      const { data: svc } = await supabase.from("client_services").select("department,service_label,service_key").eq("workspace_id", id);
+      setServices(svc || []);
+      setLoading(false);
     })();
   }, [id, router]);
 
