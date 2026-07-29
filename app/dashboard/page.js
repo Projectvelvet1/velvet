@@ -47,8 +47,7 @@ export default function Dashboard() {
       const { data: ws } = await supabase.from("workspaces")
         .select("id,name,is_demo,phase,onboarding_complete,project_lead_id,start_date").order("created_at", { ascending: true });
       const all = ws || [];
-      const today = new Date().toISOString().slice(0, 10);
-      setActiveClients(all.filter((w) => w.phase === "signed" && w.onboarding_complete && (!w.start_date || w.start_date <= today)));
+      setActiveClients(all.filter((w) => w.phase === "signed" && w.onboarding_complete));
       const isProjectLead = all.some((w) => w.project_lead_id === uid);
       const all3 = !!p.is_super_admin || isProjectLead;
       setSeesAll(all3);
