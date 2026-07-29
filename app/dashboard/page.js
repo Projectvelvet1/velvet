@@ -24,6 +24,7 @@ export default function Dashboard() {
   const [editMeta, setEditMeta] = useState(null);
   const [busy, setBusy] = useState(false);
   const [metaErr, setMetaErr] = useState("");
+  const [dashNote, setDashNote] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -57,7 +58,7 @@ export default function Dashboard() {
 
       if (all3) {
         const res = await fetch("/api/dashboard-clients", { headers: { Authorization: `Bearer ${session.access_token}` } });
-        if (res.ok) { const j = await res.json(); setRichClients(j.clients || []); }
+        if (res.ok) { const j = await res.json(); setRichClients(j.clients || []); setDashNote(j.note || ""); }
       }
       setLoading(false);
     })();
@@ -92,6 +93,7 @@ export default function Dashboard() {
         <span className="pill p-agency">{roleLabel}</span>
       </div>
 
+      {dashNote && <div className="card" style={{ borderColor: "var(--border-accent)", background: "#FEFBF2" }}><b>Heads up</b><div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4 }}>{dashNote}</div></div>}
       {seesAll ? (
         richClients.length === 0 ? <div className="empty">No active clients yet. Clients appear here once their onboarding is complete.</div>
         : richClients.map((c) => {

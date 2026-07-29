@@ -22,11 +22,29 @@ export async function GET(req) {
   if (!me) return Response.json({ error: "Not allowed" }, { status: 403 });
   const db = admin();
 
-  let q = db.from("workspaces").select("id,name,is_demo,phase,onboarding_complete,project_lead_id,industry,website,start_date,lead_name,health,upsell,notes").eq("phase","signed").eq("onboarding_complete", true);
-  const { data: wss } = await q;
-  let active = wss || []; // active = signed + onboarding complete (no date gating)
+  const CORE = "id,name,is_demo,phase,onboarding_complete,project_lead_id";
+  const FULL = CORE + ",industry,website,start_date,lead_name,health,upsell,notes";
+  let note = null;
+  let { data: wss, error: selErr } = await db.from("workspaces").select(FULL).eq("phase","signed").eq("onboarding_complete", true);
+  if (selErr) {
+    // an optional column is missing in the DB; fall back to core columns so clients still show
+    const retry = await db.from("workspaces").select(CORE).eq("phase","signed").eq("onboarding_complete", true);
+    wss = (retry.data || []).map((w) => ({ ...w, industry:null, website:null, start_date:null, lead_name:null, health:"healthy", upsell:"", notes:"" }));
+    note = "Some client fields aren't in the database yet. Run velvet-ensure-schema.sql to add them.";
+  }
+  let active = wss || [];
   if (!me.isSuper) active = active.filter((w) => w.project_lead_id === me.uid);
-  if (active.length === 0) return Response.json({ clients: [], isSuper: me.isSuper });
+
+  if (active.length === 0) {
+    // diagnostics: help pinpoint why nothing is active
+    const { count: signedCount } = await db.from("workspaces").select("id", { count: "exact", head: true }).eq("phase","signed");
+    const { count: onbCount } = await db.from("workspaces").select("id", { count: "exact", head: true }).eq("phase","signed").eq("onboarding_complete", true);
+    if (!note) {
+      if ((signedCount || 0) > 0 && (onbCount || 0) === 0) note = `You have ${signedCount} signed client(s), but none are marked onboarding-complete. If a client finished onboarding, run velvet-fix-onboarding.sql to mark them complete.`;
+      else if ((onbCount || 0) > 0 && !me.isSuper) note = "There are active clients, but none are led by you.";
+    }
+    return Response.json({ clients: [], isSuper: me.isSuper, note });
+  }
 
   const ids = active.map((w) => w.id);
   const leadIds = [...new Set(active.map((w) => w.project_lead_id).filter(Boolean))];
@@ -58,5 +76,5 @@ export async function GET(req) {
       canEditMeta: me.isSuper || w.project_lead_id === me.uid,
     };
   });
-  return Response.json({ clients, isSuper: me.isSuper });
+  return Response.json({ clients, isSuper: me.isSuper, note });
 }
