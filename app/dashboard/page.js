@@ -5,13 +5,15 @@ import { supabase } from "../../lib/supabase";
 import Shell from "../../components/Shell";
 import ClientView from "../../components/ClientView";
 import Modal from "../../components/Modal";
-import { departmentsForRole } from "../../lib/agencyNav";
+import { departmentsForRole, DEPARTMENTS } from "../../lib/agencyNav";
 import AgencyNav from "../../components/AgencyNav";
 
 const HEALTH = { healthy: { label: "Healthy", bg: "#E4F6EC", fg: "#177E4E" }, watch: { label: "To watch", bg: "#FDEBD3", fg: "#B4640C" }, risk: { label: "At risk", bg: "#FBEAE6", fg: "#C0392B" } };
 const DEPT_COLOR = { Performance: "#C0392B", Content: "#7C3AED", Analytics: "#1E7F5C" };
 const SVC_DEPT = { paid_media:"Performance", seo:"Performance", aso:"Performance", creative_strategy:"Content", asset_production:"Content", ugc:"Content", tracking:"Analytics", dashboarding:"Analytics" };
 const DEPT_ORDER = ["Performance","Content","Analytics"];
+const TSTATUS = { todo:{l:"To do",bg:"#EEF0FF",fg:"#3B49C7"}, in_progress:{l:"In progress",bg:"#FFF3D6",fg:"#9A6B00"}, delivered:{l:"Delivered",bg:"#E7F0FF",fg:"#2557C7"}, reviewed:{l:"Reviewed",bg:"#E4F6EC",fg:"#177E4E"}, needs_look:{l:"Needs another look",bg:"#FDEBD3",fg:"#B4640C"} };
+const SVC_LABEL = {}; DEPARTMENTS.forEach((d) => d.services.forEach((x) => { SVC_LABEL[x.key] = x.label; }));
 
 export default function Dashboard() {
   const router = useRouter();
@@ -25,6 +27,11 @@ export default function Dashboard() {
   const [editMeta, setEditMeta] = useState(null);
   const [busy, setBusy] = useState(false);
   const [metaErr, setMetaErr] = useState("");
+  const [myMode, setMyMode] = useState(false);
+  const [myTasks, setMyTasks] = useState([]);
+  const [myClients, setMyClients] = useState([]);
+  const [myCounts, setMyCounts] = useState({ in_progress: 0, delivered: 0, needs_look: 0, done: 0 });
+  const [myServiceLine, setMyServiceLine] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -53,8 +60,32 @@ export default function Dashboard() {
       const isProjectLead = all.some((w) => w.project_lead_id === uid);
       const all3 = !!p.is_super_admin || isProjectLead;
       setSeesAll(all3);
-      const { data: assignsMine } = await supabase.from("service_assignments").select("service_key").eq("profile_id", uid);
+      const { data: assignsMine } = await supabase.from("service_assignments").select("service_key,workspace_id").eq("profile_id", uid);
       setDepts(departmentsForRole({ seesAll: all3, assignedServiceKeys: new Set((assignsMine || []).map((a) => a.service_key)) }));
+
+      const teamMemberOnly = !p.is_super_admin && !isProjectLead;
+      if (teamMemberOnly) {
+        setMyMode(true);
+        const nameOf = (wid) => (all.find((w) => w.id === wid)?.name) || "Client";
+        // their clients (distinct), each opens their assigned service dashboard
+        const seen = {}; const myCl = [];
+        (assignsMine || []).forEach((a) => { if (!seen[a.workspace_id]) { seen[a.workspace_id] = a.service_key; myCl.push({ id: a.workspace_id, name: nameOf(a.workspace_id), serviceKey: a.service_key }); } });
+        setMyClients(myCl);
+        const svcKeys = [...new Set((assignsMine || []).map((a) => a.service_key))];
+        setMyServiceLine(svcKeys.map((k) => SVC_LABEL[k] || k).join(", "));
+        // their tasks across all clients
+        const { data: mine } = await supabase.from("tasks").select("id,title,status,workspace_id,service_key,updated_at").eq("assignee_id", uid).order("updated_at", { ascending: false });
+        const rows = (mine || []).map((t) => ({ ...t, client: nameOf(t.workspace_id) }));
+        setMyTasks(rows);
+        const now = new Date(); const mKey = now.getFullYear() + "-" + now.getMonth();
+        setMyCounts({
+          in_progress: rows.filter((t) => t.status === "in_progress").length,
+          delivered: rows.filter((t) => t.status === "delivered").length,
+          needs_look: rows.filter((t) => t.status === "needs_look").length,
+          done: rows.filter((t) => t.status === "reviewed" && new Date(t.updated_at).getFullYear() + "-" + new Date(t.updated_at).getMonth() === mKey).length,
+        });
+        setLoading(false); return;
+      }
 
       // active = signed + onboarding complete; project lead limited to their own
       let active = all.filter((w) => w.phase === "signed" && w.onboarding_complete);
@@ -119,6 +150,81 @@ export default function Dashboard() {
 
   const roleLabel = profile?.is_super_admin ? "Super admin" : "Team member";
   const nav = <AgencyNav profile={profile} active="dashboard" depts={depts} />;
+  const firstName = (profile?.full_name || profile?.email || "there").split(" ")[0].split("@")[0];
+
+  if (myMode) {
+    const countCard = (label, n, color) => (
+      <div className="card" style={{ margin: 0 }}>
+        <div style={{ fontSize: 11, color: "var(--faint)" }}>{label}</div>
+        <div style={{ fontSize: 26, fontWeight: 600, color: color || "var(--text)" }}>{n}</div>
+      </div>
+    );
+    return (
+      <Shell profile={profile} roleLabel={roleLabel} nav={nav}>
+        <div className="page-head">
+          <div>
+            <h1 style={{ fontSize: 24 }}>Welcome, {firstName}</h1>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 2 }}>{myServiceLine ? myServiceLine + " · your work across clients" : "Your work across clients"}</div>
+          </div>
+          <span className="pill p-agency">Team member</span>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
+          {countCard("In progress", myCounts.in_progress)}
+          {countCard("Awaiting client", myCounts.delivered)}
+          {countCard("Back to you", myCounts.needs_look, myCounts.needs_look ? "#B4640C" : null)}
+          {countCard("Done this month", myCounts.done, "#177E4E")}
+        </div>
+
+        <div className="card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <b>What needs attention</b><span className="pill p-agency">demo</span>
+          </div>
+          {myCounts.needs_look > 0
+            ? <div style={{ fontSize: 13 }}>{myCounts.needs_look} item(s) came back from a client, look for the "Back to you" tasks below.</div>
+            : <div style={{ fontSize: 13, color: "var(--faint)" }}>Nothing needs your attention right now. The AI signals feed (priority nudges) arrives with the analytics wiring.</div>}
+        </div>
+
+        <div className="card">
+          <b>My work</b>
+          <div style={{ fontSize: 12, color: "var(--faint)", margin: "2px 0 8px" }}>Your items across every client you're on.</div>
+          {myTasks.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>No tasks assigned to you yet.</div>
+            : myTasks.map((t) => {
+              const st = TSTATUS[t.status] || TSTATUS.todo;
+              return (
+                <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 0", borderTop: "0.5px solid var(--line)" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13 }}>{t.title}</div>
+                    <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 1 }}>{t.client} · {SVC_LABEL[t.service_key] || t.service_key}</div>
+                  </div>
+                  <span style={{ display: "flex", gap: 8, alignItems: "center", flex: "none" }}>
+                    <span className="pill" style={{ background: st.bg, color: st.fg }}>{st.l}</span>
+                    <button className="btn btn-ghost" onClick={() => router.push(`/client/${t.workspace_id}/service/${t.service_key}`)}>Open</button>
+                  </span>
+                </div>
+              );
+            })}
+        </div>
+
+        <div className="card">
+          <b>My clients</b>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+            {myClients.length === 0 ? <span style={{ fontSize: 13, color: "var(--faint)" }}>No clients assigned yet.</span>
+              : myClients.map((c) => (
+                <button key={c.id} className="pill" style={{ border: "0.5px solid var(--line)", cursor: "pointer" }} onClick={() => router.push(`/client/${c.id}/service/${c.serviceKey}`)}>{c.name} →</button>
+              ))}
+          </div>
+        </div>
+
+        <div className="card" style={{ opacity: 0.7 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <b>Ask Velvet</b><span className="pill p-agency">coming soon</span>
+          </div>
+          <div style={{ fontSize: 13, color: "var(--faint)", marginTop: 6 }}>Your AI copilot for this workspace lands in a later build.</div>
+        </div>
+      </Shell>
+    );
+  }
 
   return (
     <Shell profile={profile} roleLabel={roleLabel} nav={nav}>
