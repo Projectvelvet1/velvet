@@ -25,6 +25,9 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   // ---- onboarding answers ----
   const [flat, setFlat] = useState([]);
   const [openKey, setOpenKey] = useState(null);
+  const [answersOpen, setAnswersOpen] = useState(false);
+  const [svcPeople, setSvcPeople] = useState({});
+  const [deptOpen, setDeptOpen] = useState(null);
   const [answers, setAnswers] = useState({});
   const [hasAny, setHasAny] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
@@ -44,6 +47,17 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   const [fbDone, setFbDone] = useState(false);
 
   useEffect(() => { setWsLocal(workspace); }, [workspace]);
+  useEffect(() => {
+    (async () => {
+      if (!viewingAs || !workspace?.id) return;
+      const { data: asg } = await supabase.from("service_assignments").select("service_key,profile_id").eq("workspace_id", workspace.id);
+      const ids = [...new Set((asg || []).map((a) => a.profile_id))];
+      const { data: profs } = ids.length ? await supabase.from("profiles").select("id,full_name,email").in("id", ids) : { data: [] };
+      const nameOf = (id) => { const pr = (profs || []).find((x) => x.id === id); return pr ? (pr.full_name || pr.email) : "Unknown"; };
+      const map = {}; (asg || []).forEach((a) => { (map[a.service_key] ||= []).push(nameOf(a.profile_id)); });
+      setSvcPeople(map);
+    })();
+  }, [viewingAs, workspace?.id]);
   useEffect(() => {
     (async () => {
       if (!workspace?.id) return;
@@ -123,6 +137,37 @@ export default function ClientView({ workspace, services = [], profile, viewingA
     </>);
   }
 
+  const DEP_COLOR = { performance: "#C0392B", content: "#7C3AED", analytics: "#1E7F5C" };
+  const deptDrilldown = (
+    <>
+      <h3 style={{ fontSize: 16, margin: "22px 0 10px" }}>Departments</h3>
+      <p style={{ fontSize: 12, color: "var(--faint)", marginTop: -4, marginBottom: 10 }}>Open a department to see this client's services, the team on each, and their live dashboards.</p>
+      {Object.keys(grouped).length === 0 ? <div className="empty">No services yet.</div>
+        : ["performance", "content", "analytics"].filter((d) => grouped[d]).map((dep) => {
+          const open = deptOpen === dep;
+          return (
+            <div className="card" key={dep} style={{ padding: 0, overflow: "hidden" }}>
+              <div onClick={() => setDeptOpen(open ? null : dep)} style={{ cursor: "pointer", padding: "13px 15px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <b style={{ color: DEP_COLOR[dep] }}>{DEPT_LABEL[dep]}</b>
+                <span style={{ color: "var(--faint)" }}>{open ? "▾" : "▸"}</span>
+              </div>
+              {open && (
+                <div style={{ padding: "0 12px 10px" }}>
+                  {grouped[dep].map((s) => (
+                    <div key={s.service_key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 6px", borderTop: "0.5px solid var(--line)" }}>
+                      <div><div style={{ fontSize: 13, fontWeight: 600 }}>{s.service_label}</div>
+                        <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 1 }}>{(svcPeople[s.service_key] || []).join(", ") || "No one assigned"}</div></div>
+                      <button className="btn btn-ghost" onClick={() => router.push(`/client/${workspace.id}/service/${s.service_key}`)}>Open dashboard →</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+    </>
+  );
+
   const banner = viewingAs ? (
     <div className="viewbar">
       <div><b>Viewing as {workspace.name}</b> · you can act on this client's behalf</div>
@@ -135,13 +180,17 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   const answersSection = (
     <>
       <div className="page-head" style={{ marginTop: 26, marginBottom: 10 }}>
-        <h3 style={{ fontSize: 16 }}>Onboarding answers</h3>
-        <div style={{ display: "flex", gap: 8 }}>
-          {viewingAs && <button className="btn btn-ghost" onClick={() => router.push(`/questions?phase=${answersPhase}`)}>Edit questions</button>}
-          <button className="btn btn-ghost" onClick={openEdit}>{hasAny ? "Edit answers" : "Fill in answers"}</button>
-        </div>
+        <h3 style={{ fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }} onClick={() => setAnswersOpen((v) => !v)}>
+          Onboarding answers <span style={{ color: "var(--faint)", fontSize: 15 }}>{answersOpen ? "▾" : "▸"}</span>
+        </h3>
+        {answersOpen && (
+          <div style={{ display: "flex", gap: 8 }}>
+            {viewingAs && <button className="btn btn-ghost" onClick={() => router.push(`/questions?phase=${answersPhase}`)}>Edit questions</button>}
+            <button className="btn btn-ghost" onClick={openEdit}>{hasAny ? "Edit answers" : "Fill in answers"}</button>
+          </div>
+        )}
       </div>
-      {flat.length === 0 ? (
+      {!answersOpen ? null : flat.length === 0 ? (
         <div className="empty">No questions have been set up yet.{viewingAs ? " Use “Edit questions” to add them." : ""}</div>
       ) : (
         <div className="faq">
@@ -243,12 +292,16 @@ export default function ClientView({ workspace, services = [], profile, viewingA
         <>
           <div className="card"><b>{workspace.name}</b><p style={{ color: "var(--muted)", margin: "6px 0 0", fontSize: 14 }}>Dashboards are ready.</p></div>
           {answersSection}
-          <h3 style={{ fontSize: 16, margin: "22px 0 10px" }}>{viewingAs ? "Services" : "Your services"}</h3>
-          {services.map((s) => (
-            <div className={"card svc-card svc svc-" + s.service_key} key={s.service_key} style={{ cursor: "pointer" }}>
-              <b>{s.service_label}</b><div style={{ color: "var(--muted)", fontSize: 13, marginTop: 2 }}>{DEPT_LABEL[s.department]}</div>
-            </div>
-          ))}
+          {viewingAs ? deptDrilldown : (
+            <>
+              <h3 style={{ fontSize: 16, margin: "22px 0 10px" }}>Your services</h3>
+              {services.map((s) => (
+                <div className={"card svc-card svc svc-" + s.service_key} key={s.service_key} style={{ cursor: "pointer" }} onClick={() => router.push(`/client/${workspace.id}/service/${s.service_key}`)}>
+                  <b>{s.service_label}</b><div style={{ color: "var(--muted)", fontSize: 13, marginTop: 2 }}>{DEPT_LABEL[s.department]}</div>
+                </div>
+              ))}
+            </>
+          )}
         </>
       )}
 
