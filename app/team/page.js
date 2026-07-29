@@ -38,17 +38,19 @@ export default function Team() {
     })();
   }, [router]);
 
-  function openEdit(p) { setErr(""); setEdit({ ...p, fullName: p.full_name || "", jobTitle: p.job_title || "", homeDepartment: p.home_department || "" }); }
+  function openEdit(p) { setErr(""); setEdit({ ...p, fullName: p.full_name || "", jobTitle: p.job_title || "", homeDepartment: p.home_department || "", isSuper: !!p.is_super_admin }); }
 
   async function save(e) {
     e.preventDefault(); setBusy(true); setErr("");
-    const { data } = await supabase.auth.getSession();
-    const res = await fetch("/api/team", {
-      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` },
-      body: JSON.stringify({ id: edit.id, fullName: edit.fullName, jobTitle: edit.jobTitle, homeDepartment: edit.homeDepartment || null }),
-    });
-    const j = await res.json(); setBusy(false);
-    if (!res.ok) { setErr(j.error || "Could not save"); return; }
+    const patch = {
+      full_name: (edit.fullName || "").trim() || null,
+      job_title: (edit.jobTitle || "").trim() || null,
+      home_department: edit.homeDepartment || null,
+      is_super_admin: !!edit.isSuper,
+    };
+    const { error } = await supabase.from("profiles").update(patch).eq("id", edit.id);
+    setBusy(false);
+    if (error) { setErr(error.message || "Could not save"); return; }
     setEdit(null); load();
   }
 
@@ -104,6 +106,12 @@ export default function Team() {
                 <option value="content">Content</option>
                 <option value="analytics">Analytics</option>
               </select></div>
+            <div className="field"><label>Access level</label>
+              <select className="input" value={edit.isSuper ? "super" : "member"} disabled={edit.id === profile?.id} onChange={(e) => setEdit({ ...edit, isSuper: e.target.value === "super" })}>
+                <option value="member">Team member</option>
+                <option value="super">Super admin</option>
+              </select>
+              {edit.id === profile?.id && <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 4 }}>You can't change your own access level.</div>}</div>
             <button className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
           </form>
         </Modal>

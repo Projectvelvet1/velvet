@@ -27,6 +27,7 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   const [openKey, setOpenKey] = useState(null);
   const [answersOpen, setAnswersOpen] = useState(false);
   const [svcPeople, setSvcPeople] = useState({});
+  const [allTeam, setAllTeam] = useState([]);
   const [deptOpen, setDeptOpen] = useState(null);
   const [answers, setAnswers] = useState({});
   const [hasAny, setHasAny] = useState(false);
@@ -47,17 +48,27 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   const [fbDone, setFbDone] = useState(false);
 
   useEffect(() => { setWsLocal(workspace); }, [workspace]);
-  useEffect(() => {
-    (async () => {
-      if (!viewingAs || !workspace?.id) return;
-      const { data: asg } = await supabase.from("service_assignments").select("service_key,profile_id").eq("workspace_id", workspace.id);
-      const ids = [...new Set((asg || []).map((a) => a.profile_id))];
-      const { data: profs } = ids.length ? await supabase.from("profiles").select("id,full_name,email").in("id", ids) : { data: [] };
-      const nameOf = (id) => { const pr = (profs || []).find((x) => x.id === id); return pr ? (pr.full_name || pr.email) : "Unknown"; };
-      const map = {}; (asg || []).forEach((a) => { (map[a.service_key] ||= []).push(nameOf(a.profile_id)); });
-      setSvcPeople(map);
-    })();
-  }, [viewingAs, workspace?.id]);
+  async function loadAssignments() {
+    if (!workspace?.id) return;
+    const { data: everyone } = await supabase.from("profiles").select("id,full_name,email,home_department").eq("side", "agency");
+    setAllTeam(everyone || []);
+    const nameOf = (id) => { const pr = (everyone || []).find((x) => x.id === id); return pr ? (pr.full_name || pr.email) : "Unknown"; };
+    const { data: asg } = await supabase.from("service_assignments").select("service_key,profile_id").eq("workspace_id", workspace.id);
+    const map = {}; (asg || []).forEach((a) => { (map[a.service_key] ||= []).push({ id: a.profile_id, name: nameOf(a.profile_id) }); });
+    setSvcPeople(map);
+  }
+  useEffect(() => { if (viewingAs && workspace?.id) loadAssignments(); }, [viewingAs, workspace?.id]);
+
+  async function addAssignee(serviceKey, profileId) {
+    if (!profileId) return;
+    await supabase.from("service_assignments").insert({ workspace_id: workspace.id, service_key: serviceKey, profile_id: profileId });
+    await supabase.from("memberships").upsert({ profile_id: profileId, workspace_id: workspace.id }, { onConflict: "profile_id,workspace_id", ignoreDuplicates: true });
+    loadAssignments();
+  }
+  async function removeAssignee(serviceKey, profileId) {
+    await supabase.from("service_assignments").delete().eq("workspace_id", workspace.id).eq("service_key", serviceKey).eq("profile_id", profileId);
+    loadAssignments();
+  }
   useEffect(() => {
     (async () => {
       if (!workspace?.id) return;
@@ -153,6 +164,7 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   }
 
   const DEP_COLOR = { performance: "#C0392B", content: "#7C3AED", analytics: "#1E7F5C" };
+  const SVC_DEP = {}; ALL_SERVICES.forEach((x) => { SVC_DEP[x.key] = x.dep; });
   const deptDrilldown = (
     <>
       <h3 style={{ fontSize: 16, margin: "22px 0 10px" }}>Departments</h3>
@@ -168,13 +180,30 @@ export default function ClientView({ workspace, services = [], profile, viewingA
               </div>
               {open && (
                 <div style={{ padding: "0 12px 10px" }}>
-                  {grouped[dep].map((s) => (
-                    <div key={s.service_key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 6px", borderTop: "0.5px solid var(--line)" }}>
-                      <div><div style={{ fontSize: 13, fontWeight: 600 }}>{s.service_label}</div>
-                        <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 1 }}>{(svcPeople[s.service_key] || []).join(", ") || "No one assigned"}</div></div>
-                      <button className="btn btn-ghost" onClick={() => router.push(`/client/${workspace.id}/service/${s.service_key}`)}>Open dashboard →</button>
-                    </div>
-                  ))}
+                  {grouped[dep].map((s) => {
+                    const people = svcPeople[s.service_key] || [];
+                    const assignedIds = new Set(people.map((p) => p.id));
+                    const eligible = allTeam.filter((t) => t.home_department === SVC_DEP[s.service_key] && !assignedIds.has(t.id));
+                    return (
+                      <div key={s.service_key} style={{ padding: "10px 6px", borderTop: "0.5px solid var(--line)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600 }}>{s.service_label}</div>
+                          <button className="btn btn-ghost" onClick={() => router.push(`/client/${workspace.id}/service/${s.service_key}`)}>Open dashboard →</button>
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                          {people.length === 0 && <span style={{ fontSize: 11, color: "var(--faint)" }}>No one assigned</span>}
+                          {people.map((pp) => (
+                            <span key={pp.id} className="pill" style={{ border: "0.5px solid var(--line)", display: "flex", alignItems: "center", gap: 6 }}>{pp.name}
+                              <span style={{ cursor: "pointer", color: "var(--faint)" }} onClick={() => removeAssignee(s.service_key, pp.id)}>✕</span></span>
+                          ))}
+                        </div>
+                        <select className="input" style={{ marginTop: 8, maxWidth: 260 }} value="" onChange={(e) => addAssignee(s.service_key, e.target.value)}>
+                          <option value="">{eligible.length ? "+ Add a " + DEPT_LABEL[dep] + " teammate…" : "No " + DEPT_LABEL[dep] + " teammates free (set their department on Team)"}</option>
+                          {eligible.map((t) => <option key={t.id} value={t.id}>{t.full_name || t.email}</option>)}
+                        </select>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
