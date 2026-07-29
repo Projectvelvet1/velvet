@@ -55,6 +55,7 @@ export default function ClientServiceDashboard() {
   const [showAdd, setShowAdd] = useState(false);
   const [showAssign, setShowAssign] = useState(false);
   const [agencyPeople, setAgencyPeople] = useState([]);
+  const [clientPeople, setClientPeople] = useState([]);
   const [taskTab, setTaskTab] = useState("all");
   const [qYear, setQYear] = useState(new Date().getFullYear());
   const [qQuarter, setQQuarter] = useState(Math.floor(new Date().getMonth() / 3) + 1);
@@ -262,7 +263,7 @@ export default function ClientServiceDashboard() {
       )}
 
       {showAdd && <AddTask me={uid} fixedClient={{ id, name: ws?.name }} defaultServiceKey={key} onClose={() => setShowAdd(false)} onCreated={loadTasks} />}
-      {showAssign && <AssignTask me={uid} client={{ id, name: ws?.name }} serviceKey={key} people={agencyPeople} onClose={() => setShowAssign(false)} onCreated={loadTasks} />}
+      {showAssign && <AssignTask me={uid} client={{ id, name: ws?.name }} serviceKey={key} agencyPeople={agencyPeople} clientPeople={clientPeople} onClose={() => setShowAssign(false)} onCreated={loadTasks} />}
 
       {showCompare && (
         <Modal title="You vs competitors" onClose={() => setShowCompare(false)}>

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Shell from "./Shell";
 import Modal from "./Modal";
+import AssignTask from "./AssignTask";
 import { loadQuestions } from "../lib/onboardingQuestions";
 import { supabase } from "../lib/supabase";
 
@@ -29,6 +30,10 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   const [svcPeople, setSvcPeople] = useState({});
   const [allTeam, setAllTeam] = useState([]);
   const [deptOpen, setDeptOpen] = useState(null);
+  const [meId, setMeId] = useState(null);
+  const [showAssign, setShowAssign] = useState(false);
+  const [cvAgency, setCvAgency] = useState([]);
+  const [cvClient, setCvClient] = useState([]);
   const [answers, setAnswers] = useState({});
   const [hasAny, setHasAny] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
@@ -58,6 +63,18 @@ export default function ClientView({ workspace, services = [], profile, viewingA
     setSvcPeople(map);
   }
   useEffect(() => { if (viewingAs && workspace?.id) loadAssignments(); }, [viewingAs, workspace?.id]);
+  useEffect(() => {
+    (async () => {
+      if (viewingAs || !workspace?.id) return; // client's own portal only
+      const { data: { user } } = await supabase.auth.getUser();
+      setMeId(user?.id || null);
+      const { data: mem } = await supabase.from("memberships").select("profile_id").eq("workspace_id", workspace.id);
+      const ids = [...new Set((mem || []).map((m) => m.profile_id))];
+      const { data: profs } = ids.length ? await supabase.from("profiles").select("id,full_name,email,side").in("id", ids) : { data: [] };
+      setCvAgency((profs || []).filter((x) => x.side === "agency").map((x) => ({ id: x.id, name: x.full_name || x.email })));
+      setCvClient((profs || []).filter((x) => x.side === "client").map((x) => ({ id: x.id, name: x.full_name || x.email })));
+    })();
+  }, [viewingAs, workspace?.id]);
 
   async function addAssignee(serviceKey, profileId) {
     if (!profileId) return;
@@ -258,8 +275,11 @@ export default function ClientView({ workspace, services = [], profile, viewingA
     </>
   );
 
+  const assignModal = showAssign && meId ? <AssignTask me={meId} client={{ id: workspace.id, name: workspace.name }} serviceKey="general" agencyPeople={cvAgency} clientPeople={cvClient} onClose={() => setShowAssign(false)} onCreated={() => setShowAssign(false)} /> : null;
+
   return (
     <Shell profile={shellProfile} roleLabel={viewingAs ? "Client view" : "Client"} nav={nav} banner={banner} footer={footer}>
+      {assignModal}
       <div className="page-head">
         <h1 style={{ fontSize: 24 }}>{viewingAs ? wsLocal.name : `Welcome, ${firstName}`}</h1>
         <span className="pill p-client">{isProspect ? "Discovery" : "Client"}</span>
@@ -334,7 +354,7 @@ export default function ClientView({ workspace, services = [], profile, viewingA
         </>
       ) : (
         <>
-          <div className="card"><b>{workspace.name}</b><p style={{ color: "var(--muted)", margin: "6px 0 0", fontSize: 14 }}>Dashboards are ready.</p></div>
+          <div className="card"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><b>{workspace.name}</b><p style={{ color: "var(--muted)", margin: "6px 0 0", fontSize: 14 }}>Dashboards are ready.</p></div>{!viewingAs && <button className="btn btn-primary" onClick={() => setShowAssign(true)}>Assign a task</button>}</div></div>
           {answersSection}
           {viewingAs ? deptDrilldown : (
             <>

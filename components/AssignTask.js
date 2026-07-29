@@ -10,9 +10,11 @@ function fileToBase64(file) { return new Promise((res, rej) => { const r = new F
 function fileToText(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsText(file); }); }
 
 // Assign a task to someone else, for a fixed client. people: [{id,name}].
-export default function AssignTask({ me, client, serviceKey = "general", people = [], defaultAssignee = "", onClose, onCreated }) {
+export default function AssignTask({ me, client, serviceKey = "general", agencyPeople = [], clientPeople = [], onClose, onCreated }) {
   const [title, setTitle] = useState("");
-  const [assignTo, setAssignTo] = useState(defaultAssignee || (people[0]?.id || ""));
+  const [target, setTarget] = useState("agency");
+  const [assignTo, setAssignTo] = useState("");
+  const people = target === "agency" ? agencyPeople : clientPeople;
   const [priority, setPriority] = useState("medium");
   const [frequency, setFrequency] = useState("one_off");
   const [dueDate, setDueDate] = useState("");
@@ -103,8 +105,13 @@ export default function AssignTask({ me, client, serviceKey = "general", people 
           <textarea className="input" rows={3} value={brief} onChange={(e) => setBrief(e.target.value)} placeholder="Explain what needs doing and any context..." /></div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div className="field"><label>Assign to</label>
+            <div style={{ display: "flex", gap: 4, background: "var(--cloud,#F5F6F8)", padding: 3, borderRadius: 8, marginBottom: 6, width: "fit-content" }}>
+              {[["agency", "To the agency"], ["client", "To the client"]].map(([v, l]) => (
+                <button type="button" key={v} onClick={() => { setTarget(v); setAssignTo(""); }} className="btn" style={{ padding: "5px 10px", fontSize: 12, background: target === v ? "#fff" : "transparent", boxShadow: target === v ? "0 1px 2px rgba(0,0,0,.06)" : "none", color: target === v ? "var(--text)" : "var(--muted)" }}>{l}</button>
+              ))}
+            </div>
             <select className="input" value={assignTo} onChange={(e) => setAssignTo(e.target.value)}>
-              <option value="">— Select person —</option>
+              <option value="">{people.length ? "— Select person —" : (target === "client" ? "No client-side people yet" : "No agency people")}</option>
               {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select></div>
           <div className="field"><label>Share result with (optional)</label>
