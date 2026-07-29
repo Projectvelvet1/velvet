@@ -17,16 +17,16 @@ export async function POST(req) {
   const phase = body?.phase === "full" ? "full" : "discovery";
   if (!workspaceId) return Response.json({ error: "Missing client" }, { status: 400 });
 
-  // verify membership (or super admin)
-  const { data: prof } = await asUser.from("profiles").select("is_super_admin").eq("id", user.id).single();
+  // verify membership (or super admin) using admin access, so RLS on memberships
+  // can't wrongly block a client from completing their own onboarding.
+  const db = admin();
+  const { data: prof } = await db.from("profiles").select("is_super_admin").eq("id", user.id).single();
   let ok = !!prof?.is_super_admin;
   if (!ok) {
-    const { data: mem } = await asUser.from("memberships").select("id").eq("profile_id", user.id).eq("workspace_id", workspaceId).maybeSingle();
+    const { data: mem } = await db.from("memberships").select("id").eq("profile_id", user.id).eq("workspace_id", workspaceId).maybeSingle();
     ok = !!mem;
   }
   if (!ok) return Response.json({ error: "Not allowed" }, { status: 403 });
-
-  const db = admin();
   const patch = phase === "full" ? { onboarding_complete: true } : { discovery_complete: true };
   const { error } = await db.from("workspaces").update(patch).eq("id", workspaceId);
   if (error) return Response.json({ error: error.message }, { status: 500 });

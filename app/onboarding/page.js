@@ -18,6 +18,7 @@ function OnboardingInner() {
   const [asAgency, setAsAgency] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  const [err, setErr] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -55,8 +56,10 @@ function OnboardingInner() {
     const rows = questions.map((q) => ({ workspace_id: ws.id, phase, question_key: q.key, answer: answers[q.key] || "", updated_at: new Date().toISOString() }));
     await supabase.from("onboarding_responses").upsert(rows, { onConflict: "workspace_id,phase,question_key" });
     const { data } = await supabase.auth.getSession();
-    await fetch("/api/onboarding-complete", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: ws.id, phase }) });
-    setBusy(false); setDone(true);
+    const res = await fetch("/api/onboarding-complete", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: ws.id, phase }) });
+    setBusy(false);
+    if (!res.ok) { const j = await res.json().catch(() => ({})); setErr(j.error || "We saved your answers but couldn't finish. Please click Submit again."); return; }
+    setErr(""); setDone(true);
   }
 
   if (loading) return <div className="center">Loading…</div>;
@@ -112,6 +115,7 @@ function OnboardingInner() {
         {total > 0 && (
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
             <button className="btn btn-primary" disabled={!allDone || busy} onClick={submit}>{busy ? "Submitting…" : allDone ? "Submit" : "Complete all fields to submit"}</button>
+            {err && <div className="auth-msg auth-err" style={{ marginTop: 10 }}>{err}</div>}
           </div>
         )}
       </div>
