@@ -6,6 +6,7 @@ import Shell from "../../../../../components/Shell";
 import AgencyNav from "../../../../../components/AgencyNav";
 import Modal from "../../../../../components/Modal";
 import AddTask from "../../../../../components/AddTask";
+import AssignTask from "../../../../../components/AssignTask";
 import { loadAgencyDepts, DEPARTMENTS } from "../../../../../lib/agencyNav";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,8 @@ export default function ClientServiceDashboard() {
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
   const [showAdd, setShowAdd] = useState(false);
+  const [showAssign, setShowAssign] = useState(false);
+  const [agencyPeople, setAgencyPeople] = useState([]);
   const [taskTab, setTaskTab] = useState("all");
   const [qYear, setQYear] = useState(new Date().getFullYear());
   const [qQuarter, setQQuarter] = useState(Math.floor(new Date().getMonth() / 3) + 1);
@@ -189,6 +192,7 @@ export default function ClientServiceDashboard() {
         <div style={{ fontSize: 12, color: "var(--faint)", margin: "2px 0 10px" }}>The team's action plan for this client. Move items To do → In progress → Delivered.</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
           <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add task</button>
+          <button className="btn btn-ghost" onClick={() => setShowAssign(true)}>Assign task</button>
         </div>
 
         <div style={{ display: "flex", gap: 4, background: "var(--cloud,#F5F6F8)", padding: 4, borderRadius: 10, width: "fit-content", marginBottom: 10, flexWrap: "wrap" }}>
@@ -258,6 +262,7 @@ export default function ClientServiceDashboard() {
       )}
 
       {showAdd && <AddTask me={uid} fixedClient={{ id, name: ws?.name }} defaultServiceKey={key} onClose={() => setShowAdd(false)} onCreated={loadTasks} />}
+      {showAssign && <AssignTask me={uid} client={{ id, name: ws?.name }} serviceKey={key} people={agencyPeople} onClose={() => setShowAssign(false)} onCreated={loadTasks} />}
 
       {showCompare && (
         <Modal title="You vs competitors" onClose={() => setShowCompare(false)}>
