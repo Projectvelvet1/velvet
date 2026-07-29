@@ -20,6 +20,7 @@ async function agencyUser(req) {
 export async function GET(req) {
   const me = await agencyUser(req);
   if (!me) return Response.json({ error: "Not allowed" }, { status: 403 });
+  try {
   const db = admin();
 
   const CORE = "id,name,is_demo,phase,onboarding_complete,project_lead_id";
@@ -77,4 +78,7 @@ export async function GET(req) {
     };
   });
   return Response.json({ clients, isSuper: me.isSuper, note });
+  } catch (e) {
+    return Response.json({ clients: [], isSuper: me.isSuper, debug: "Server error: " + (e?.message || String(e)) });
+  }
 }

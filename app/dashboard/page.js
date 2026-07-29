@@ -57,8 +57,15 @@ export default function Dashboard() {
       setDepts(departmentsForRole({ seesAll: all3, assignedServiceKeys }));
 
       if (all3) {
-        const res = await fetch("/api/dashboard-clients", { headers: { Authorization: `Bearer ${session.access_token}` } });
-        if (res.ok) { const j = await res.json(); setRichClients(j.clients || []); setDashNote(j.note || ""); }
+        try {
+          const res = await fetch("/api/dashboard-clients", { headers: { Authorization: `Bearer ${session.access_token}` } });
+          const text = await res.text();
+          let j = {}; try { j = JSON.parse(text); } catch {}
+          if (res.ok) { setRichClients(j.clients || []); setDashNote(j.note || ""); }
+          else { setDashNote(`The clients service returned status ${res.status}. ${j.error || j.debug || text.slice(0, 200)}`); }
+        } catch (e) {
+          setDashNote("Could not reach the clients service: " + (e?.message || String(e)));
+        }
       }
       setLoading(false);
     })();
