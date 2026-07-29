@@ -3,6 +3,14 @@ import { admin } from "../../../lib/supabaseAdmin";
 
 export const dynamic = "force-dynamic";
 
+// Re-checks the caller's OWN password against Supabase Auth, server-side.
+async function verifyPassword(email, password) {
+  if (!email || !password) return false;
+  const c = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const { error } = await c.auth.signInWithPassword({ email, password });
+  return !error;
+}
+
 // Returns { uid, isSuper } for a signed-in AGENCY user, else null.
 async function agencyUser(req) {
   const token = (req.headers.get("authorization") || "").replace("Bearer ", "").trim();
@@ -13,7 +21,7 @@ async function agencyUser(req) {
   if (!user) return null;
   const { data: prof } = await asUser.from("profiles").select("side,is_super_admin").eq("id", user.id).single();
   if (prof?.side !== "agency") return null;
-  return { uid: user.id, isSuper: !!prof.is_super_admin, token };
+  return { uid: user.id, email: user.email, isSuper: !!prof.is_super_admin, token };
 }
 
 export async function POST(req) {
@@ -115,6 +123,9 @@ export async function DELETE(req) {
   let body; try { body = await req.json(); } catch { return Response.json({ error: "Bad request" }, { status: 400 }); }
   const id = body?.workspaceId;
   if (!id) return Response.json({ error: "Missing client" }, { status: 400 });
+  if (!body?.password) return Response.json({ error: "Password required" }, { status: 400 });
+  const ok = await verifyPassword(me.email, body.password);
+  if (!ok) return Response.json({ error: "Incorrect password. Nothing was deleted." }, { status: 403 });
   const db = admin();
   // remove child rows first (in case FKs aren't all cascade), then the workspace
   await db.from("service_assignments").delete().eq("workspace_id", id);

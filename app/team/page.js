@@ -6,6 +6,7 @@ import Shell from "../../components/Shell";
 import AgencyNav from "../../components/AgencyNav";
 import { loadAgencyDepts } from "../../lib/agencyNav";
 import Modal from "../../components/Modal";
+import ConfirmDelete from "../../components/ConfirmDelete";
 
 const DEPT = { performance: "Performance", content: "Content", analytics: "Analytics" };
 
@@ -18,6 +19,7 @@ export default function Team() {
   const [edit, setEdit] = useState(null); // person being edited
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [delPerson, setDelPerson] = useState(null);
 
   async function load() {
     const { data } = await supabase
@@ -50,14 +52,13 @@ export default function Team() {
     setEdit(null); load();
   }
 
-  async function remove(e, person) {
-    e.stopPropagation();
-    if (!window.confirm(`Remove ${person.full_name || person.email} from the team? This cannot be undone.`)) return;
+  function remove(e, person) { e.stopPropagation(); setDelPerson(person); }
+  async function confirmRemove(password) {
     const { data } = await supabase.auth.getSession();
-    const res = await fetch("/api/team", { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ id: person.id }) });
+    const res = await fetch("/api/team", { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ id: delPerson.id, password }) });
     const j = await res.json();
-    if (!res.ok) { alert(j.error || "Could not remove"); return; }
-    load();
+    if (!res.ok) return { error: j.error || "Could not remove" };
+    setDelPerson(null); load(); return { ok: true };
   }
 
   const nav = <AgencyNav profile={profile} active="team" depts={depts} />;
@@ -106,6 +107,14 @@ export default function Team() {
             <button className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
           </form>
         </Modal>
+      )}
+      {delPerson && (
+        <ConfirmDelete
+          title={`Remove ${delPerson.full_name || delPerson.email}`}
+          message="This permanently removes this teammate and their assignments. This cannot be undone."
+          onCancel={() => setDelPerson(null)}
+          onConfirm={confirmRemove}
+        />
       )}
     </Shell>
   );

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
+import ConfirmDelete from "../../components/ConfirmDelete";
 import Shell from "../../components/Shell";
 import AgencyNav from "../../components/AgencyNav";
 import { loadAgencyDepts } from "../../lib/agencyNav";
@@ -26,6 +27,7 @@ export default function Clients() {
   const [profile, setProfile] = useState(null);
   const [clients, setClients] = useState([]);
   const [canAdd, setCanAdd] = useState(false);
+  const [delClient, setDelClient] = useState(null);
   const [team, setTeam] = useState([]);
   const [showModal, setShowModal] = useState(false);
   // form state
@@ -102,13 +104,13 @@ export default function Clients() {
 
   const pickedServices = Object.values(picked);
 
-  async function deleteClient(c) {
-    if (!window.confirm(`Delete ${c.name}? This removes the client and all its data. This cannot be undone.`)) return;
+  function deleteClient(c) { setDelClient(c); }
+  async function confirmDelete(password) {
     const { data } = await supabase.auth.getSession();
-    const res = await fetch("/api/clients", { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: c.id }) });
+    const res = await fetch("/api/clients", { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: delClient.id, password }) });
     const j = await res.json();
-    if (!res.ok) { alert(j.error || "Could not delete"); return; }
-    load();
+    if (!res.ok) return { error: j.error || "Could not delete" };
+    setDelClient(null); load(); return { ok: true };
   }
 
   if (loading) return <div className="center">Loading…</div>;
@@ -216,6 +218,14 @@ export default function Clients() {
           </form>
         </Modal>
       )}
-          </Shell>
+            {delClient && (
+        <ConfirmDelete
+          title={`Delete ${delClient.name}`}
+          message="This permanently deletes this client and all its services, team links, answers and feedback. This cannot be undone."
+          onCancel={() => setDelClient(null)}
+          onConfirm={confirmDelete}
+        />
+      )}
+    </Shell>
   );
 }

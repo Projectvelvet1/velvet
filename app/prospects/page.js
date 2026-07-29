@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
+import ConfirmDelete from "../../components/ConfirmDelete";
 import Shell from "../../components/Shell";
 import AgencyNav from "../../components/AgencyNav";
 import { loadAgencyDepts } from "../../lib/agencyNav";
@@ -18,6 +19,7 @@ export default function Prospects() {
   const router = useRouter();
   const [depts, setDepts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [delPros, setDelPros] = useState(null);
   const [profile, setProfile] = useState(null);
   const [allowed, setAllowed] = useState(false);
   const [prospects, setProspects] = useState([]);
@@ -93,13 +95,13 @@ export default function Prospects() {
 
   const nav = <AgencyNav profile={profile} active="prospects" depts={depts} />;
 
-  async function deleteProspect(pr) {
-    if (!window.confirm(`Delete prospect ${pr.name}? This cannot be undone.`)) return;
+  function deleteProspect(pr) { setDelPros(pr); }
+  async function confirmDeletePros(password) {
     const { data } = await supabase.auth.getSession();
-    const res = await fetch("/api/clients", { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: pr.id }) });
+    const res = await fetch("/api/clients", { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: delPros.id, password }) });
     const j = await res.json();
-    if (!res.ok) { alert(j.error || "Could not delete"); return; }
-    load();
+    if (!res.ok) return { error: j.error || "Could not delete" };
+    setDelPros(null); load(); return { ok: true };
   }
 
   if (loading) return <div className="center">Loading…</div>;
@@ -220,6 +222,14 @@ export default function Prospects() {
         </Modal>
       )}
 
+      {delPros && (
+        <ConfirmDelete
+          title={`Delete prospect ${delPros.name}`}
+          message="This permanently deletes this prospect and their discovery answers. This cannot be undone."
+          onCancel={() => setDelPros(null)}
+          onConfirm={confirmDeletePros}
+        />
+      )}
     </Shell>
   );
 }

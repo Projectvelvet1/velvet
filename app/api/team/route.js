@@ -2,6 +2,25 @@ import { createClient } from "@supabase/supabase-js";
 import { admin } from "../../../lib/supabaseAdmin";
 export const dynamic = "force-dynamic";
 
+async function verifyPassword(email, password) {
+  if (!email || !password) return false;
+  const c = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const { error } = await c.auth.signInWithPassword({ email, password });
+  return !error;
+}
+
+// Returns the caller's { uid, email } if super admin, else null.
+async function superAdminUser(req) {
+  const token = (req.headers.get("authorization") || "").replace("Bearer ", "").trim();
+  if (!token) return null;
+  const asUser = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    { global: { headers: { Authorization: `Bearer ${token}` } } });
+  const { data: { user } } = await asUser.auth.getUser();
+  if (!user) return null;
+  const { data: prof } = await asUser.from("profiles").select("is_super_admin").eq("id", user.id).single();
+  return prof?.is_super_admin ? { uid: user.id, email: user.email } : null;
+}
+
 async function requireSuperAdmin(req) {
   const token = (req.headers.get("authorization") || "").replace("Bearer ", "").trim();
   if (!token) return null;
@@ -30,12 +49,16 @@ export async function POST(req) {
 }
 
 export async function DELETE(req) {
-  const uid = await requireSuperAdmin(req);
-  if (!uid) return Response.json({ error: "Not allowed" }, { status: 403 });
+  const me = await superAdminUser(req);
+  if (!me) return Response.json({ error: "Not allowed" }, { status: 403 });
+  const uid = me.uid;
   let body; try { body = await req.json(); } catch { return Response.json({ error: "Bad request" }, { status: 400 }); }
   const id = body?.id;
   if (!id) return Response.json({ error: "Missing person" }, { status: 400 });
   if (id === uid) return Response.json({ error: "You can't remove yourself." }, { status: 400 });
+  if (!body?.password) return Response.json({ error: "Password required" }, { status: 400 });
+  const ok = await verifyPassword(me.email, body.password);
+  if (!ok) return Response.json({ error: "Incorrect password. Nothing was deleted." }, { status: 403 });
   const db = admin();
   // guard: a person who leads a client can't be removed until the lead is reassigned
   const { data: leads } = await db.from("workspaces").select("id,name").eq("project_lead_id", id);

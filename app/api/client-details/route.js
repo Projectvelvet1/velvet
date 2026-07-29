@@ -27,6 +27,9 @@ export async function POST(req) {
   if (body.industry !== undefined) patch.industry = (body.industry || "").trim() || null;
   if (body.startDate !== undefined) patch.start_date = (body.startDate || "").trim() || null;
   if (body.leadName !== undefined) patch.lead_name = (body.leadName || "").trim() || null;
+  if (body.health !== undefined) patch.health = ["healthy","watch","risk"].includes(body.health) ? body.health : "healthy";
+  if (body.upsell !== undefined) patch.upsell = (body.upsell || "").trim() || null;
+  if (body.notes !== undefined) patch.notes = (body.notes || "").trim() || null;
   if (Object.keys(patch).length) {
     const { error } = await db.from("workspaces").update(patch).eq("id", id);
     if (error) return Response.json({ error: error.message }, { status: 500 });
