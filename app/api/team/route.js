@@ -28,3 +28,23 @@ export async function POST(req) {
   if (error) return Response.json({ error: error.message }, { status: 500 });
   return Response.json({ ok: true });
 }
+
+export async function DELETE(req) {
+  const uid = await requireSuperAdmin(req);
+  if (!uid) return Response.json({ error: "Not allowed" }, { status: 403 });
+  let body; try { body = await req.json(); } catch { return Response.json({ error: "Bad request" }, { status: 400 }); }
+  const id = body?.id;
+  if (!id) return Response.json({ error: "Missing person" }, { status: 400 });
+  if (id === uid) return Response.json({ error: "You can't remove yourself." }, { status: 400 });
+  const db = admin();
+  // guard: a person who leads a client can't be removed until the lead is reassigned
+  const { data: leads } = await db.from("workspaces").select("id,name").eq("project_lead_id", id);
+  if (leads && leads.length) {
+    return Response.json({ error: `This person leads ${leads.length} client(s) (e.g. ${leads[0].name}). Reassign the project lead first.` }, { status: 400 });
+  }
+  await db.from("service_assignments").delete().eq("profile_id", id);
+  await db.from("memberships").delete().eq("profile_id", id);
+  await db.from("profiles").delete().eq("id", id);
+  try { await db.auth.admin.deleteUser(id); } catch (e) {}
+  return Response.json({ ok: true });
+}

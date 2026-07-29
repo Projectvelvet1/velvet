@@ -141,3 +141,9 @@ body.modal-open{overflow:hidden}   /* freeze background scroll */
 .faq-q{width:100%;text-align:left;background:none;border:0;cursor:pointer;padding:14px 16px;font-size:14px;font-weight:600;color:var(--text);display:flex;justify-content:space-between;align-items:center;gap:10px;font-family:inherit}
 .faq-caret{color:var(--faint);font-size:18px;line-height:1}
 .faq-a{padding:0 16px 14px;font-size:14px;white-space:pre-wrap;line-height:1.5}
+
+/* department accordion in the sidebar */
+.dept-row{display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.dept-caret{color:var(--on-dark-mut,#9AA3B2);font-size:11px}
+.svc-child{padding-left:26px !important;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px}
+.svc-child .svc-dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block;opacity:.9}

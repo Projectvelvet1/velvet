@@ -108,3 +108,27 @@ export async function GET(req) {
   }));
   return Response.json({ clients, canAdd: me.isSuper });
 }
+
+export async function DELETE(req) {
+  const me = await agencyUser(req);
+  if (!me || !me.isSuper) return Response.json({ error: "Not allowed" }, { status: 403 });
+  let body; try { body = await req.json(); } catch { return Response.json({ error: "Bad request" }, { status: 400 }); }
+  const id = body?.workspaceId;
+  if (!id) return Response.json({ error: "Missing client" }, { status: 400 });
+  const db = admin();
+  // remove child rows first (in case FKs aren't all cascade), then the workspace
+  await db.from("service_assignments").delete().eq("workspace_id", id);
+  await db.from("client_services").delete().eq("workspace_id", id);
+  await db.from("onboarding_responses").delete().eq("workspace_id", id);
+  await db.from("memberships").delete().eq("workspace_id", id);
+  const { data: subs } = await db.from("feedback_submissions").select("id").eq("workspace_id", id);
+  const subIds = (subs || []).map((x) => x.id);
+  if (subIds.length) {
+    await db.from("feedback_service_scores").delete().in("submission_id", subIds);
+    await db.from("feedback_answers").delete().in("submission_id", subIds);
+    await db.from("feedback_submissions").delete().eq("workspace_id", id);
+  }
+  const { error } = await db.from("workspaces").delete().eq("id", id);
+  if (error) return Response.json({ error: error.message }, { status: 500 });
+  return Response.json({ ok: true });
+}

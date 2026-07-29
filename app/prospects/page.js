@@ -93,6 +93,15 @@ export default function Prospects() {
 
   const nav = <AgencyNav profile={profile} active="prospects" depts={depts} />;
 
+  async function deleteProspect(pr) {
+    if (!window.confirm(`Delete prospect ${pr.name}? This cannot be undone.`)) return;
+    const { data } = await supabase.auth.getSession();
+    const res = await fetch("/api/clients", { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: pr.id }) });
+    const j = await res.json();
+    if (!res.ok) { alert(j.error || "Could not delete"); return; }
+    load();
+  }
+
   if (loading) return <div className="center">Loading…</div>;
 
   return (
@@ -117,6 +126,7 @@ export default function Prospects() {
               <button className="btn btn-ghost" onClick={() => router.push(`/client/${p.id}`)}>Open (view as)</button>
               <button className="btn btn-ghost" onClick={() => router.push(`/client/${p.id}`)}>Onboarding answers</button>
               <button className="btn btn-primary" onClick={() => openConvert(p)}>Convert to client</button>
+              <button className="btn btn-ghost" style={{ color: "var(--danger)" }} onClick={() => deleteProspect(p)}>Delete</button>
             </div>
           </div>
         ))}

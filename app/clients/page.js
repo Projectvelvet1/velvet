@@ -102,6 +102,15 @@ export default function Clients() {
 
   const pickedServices = Object.values(picked);
 
+  async function deleteClient(c) {
+    if (!window.confirm(`Delete ${c.name}? This removes the client and all its data. This cannot be undone.`)) return;
+    const { data } = await supabase.auth.getSession();
+    const res = await fetch("/api/clients", { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: c.id }) });
+    const j = await res.json();
+    if (!res.ok) { alert(j.error || "Could not delete"); return; }
+    load();
+  }
+
   if (loading) return <div className="center">Loading…</div>;
 
   return (
@@ -134,6 +143,7 @@ export default function Clients() {
           </div>
           <div style={{ marginTop: 10 }}>
             <button className="btn btn-ghost" onClick={() => router.push(`/client/${c.id}`)}>Open (view as)</button>
+            {canAdd && <button className="btn btn-ghost" style={{ color: "var(--danger)", marginLeft: 8 }} onClick={() => deleteClient(c)}>Delete</button>}
           </div>
         </div>
       ))}

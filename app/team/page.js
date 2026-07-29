@@ -29,7 +29,7 @@ export default function Team() {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.replace("/login"); return; }
-      const { data: prof } = await supabase.from("profiles").select("full_name,email,side,is_super_admin").eq("id", session.user.id).single();
+      const { data: prof } = await supabase.from("profiles").select("id,full_name,email,side,is_super_admin").eq("id", session.user.id).single();
       setDepts(await loadAgencyDepts(session.user.id, !!prof?.is_super_admin));
       if (prof?.side !== "agency") { router.replace("/dashboard"); return; }
       setProfile(prof); await load(); setLoading(false);
@@ -50,6 +50,16 @@ export default function Team() {
     setEdit(null); load();
   }
 
+  async function remove(e, person) {
+    e.stopPropagation();
+    if (!window.confirm(`Remove ${person.full_name || person.email} from the team? This cannot be undone.`)) return;
+    const { data } = await supabase.auth.getSession();
+    const res = await fetch("/api/team", { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ id: person.id }) });
+    const j = await res.json();
+    if (!res.ok) { alert(j.error || "Could not remove"); return; }
+    load();
+  }
+
   const nav = <AgencyNav profile={profile} active="team" depts={depts} />;
 
   if (loading) return <div className="center">Loading…</div>;
@@ -67,7 +77,10 @@ export default function Team() {
           <div className="card" key={p.id} onClick={() => isAdmin && openEdit(p)} style={{ cursor: isAdmin ? "pointer" : "default" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
               <b>{p.full_name || "(no name yet)"}</b>
-              {p.home_department && <span className="pill p-agency">{DEPT[p.home_department]}</span>}
+              <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {p.home_department && <span className="pill p-agency">{DEPT[p.home_department]}</span>}
+                {isAdmin && p.id !== profile?.id && <button className="btn btn-ghost" style={{ padding: "3px 9px", color: "var(--danger)" }} onClick={(e) => remove(e, p)}>Remove</button>}
+              </span>
             </div>
             <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 3 }}>
               {p.job_title || "No title yet"} · {p.email}{p.is_super_admin ? " · Super admin" : ""}
