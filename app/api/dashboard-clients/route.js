@@ -24,7 +24,8 @@ export async function GET(req) {
 
   let q = db.from("workspaces").select("id,name,is_demo,phase,onboarding_complete,project_lead_id,industry,website,start_date,lead_name,health,upsell,notes").eq("phase","signed").eq("onboarding_complete", true);
   const { data: wss } = await q;
-  let active = wss || [];
+  const today = new Date().toISOString().slice(0, 10);
+  let active = (wss || []).filter((w) => !w.start_date || w.start_date <= today); // future start dates are "upcoming", not active
   if (!me.isSuper) active = active.filter((w) => w.project_lead_id === me.uid);
   if (active.length === 0) return Response.json({ clients: [], isSuper: me.isSuper });
 
