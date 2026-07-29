@@ -175,6 +175,10 @@ export default function Dashboard() {
       overdue: open.filter((t) => t.due_date && t.due_date < today).length,
       awaiting: myTasks.filter((t) => t.status === "delivered").length,
     };
+    const [qa, qb] = rangeBounds("this_quarter");
+    const inQuarter = (d) => { if (!d) return false; const x = ymd(new Date(d)); return x >= qa && x <= qb; };
+    const doneQuarter = myTasks.filter((t) => (t.status === "delivered" || t.status === "reviewed") && inQuarter(t.updated_at)).length;
+    const unassigned = open.filter((t) => !t.due_date || !t.workspace_id).length;
     const [ra, rb] = rangeBounds(myTab);
     const queue = open.filter((t) => t.due_date && t.due_date >= ra && t.due_date <= rb)
       .sort((x, y) => (PRIO_W[y.priority] || 1) - (PRIO_W[x.priority] || 1) || (x.due_date || "").localeCompare(y.due_date || ""));
@@ -185,10 +189,11 @@ export default function Dashboard() {
       in_progress: { label: "In progress", fn: (t) => t.status === "in_progress" },
       awaiting: { label: "Awaiting client", fn: (t) => t.status === "delivered" },
       back: { label: "Back to you", fn: (t) => t.status === "needs_look" },
-      done: { label: "Done this month", fn: (t) => t.status === "reviewed" && thisMonth(t.updated_at) },
+      done: { label: "Done this quarter", fn: (t) => (t.status === "delivered" || t.status === "reviewed") && inQuarter(t.updated_at) },
       open: { label: "Open tasks", fn: (t) => ["todo", "in_progress", "needs_look"].includes(t.status) },
       dueWeek: { label: "Due this week", fn: (t) => { const [a, b] = rangeBounds("this_week"); return ["todo","in_progress","needs_look"].includes(t.status) && t.due_date && t.due_date >= a && t.due_date <= b; } },
       overdue: { label: "Overdue", fn: (t) => ["todo","in_progress","needs_look"].includes(t.status) && t.due_date && t.due_date < today },
+      unassigned: { label: "Unassigned tasks (no due date or no client)", fn: (t) => ["todo","in_progress","needs_look"].includes(t.status) && (!t.due_date || !t.workspace_id) },
     };
     const filtered = cardFilter && FILTERS[cardFilter] ? myTasks.filter(FILTERS[cardFilter].fn) : [];
     return (
@@ -204,7 +209,7 @@ export default function Dashboard() {
           {card("In progress", myCounts.in_progress, null, "in_progress")}
           {card("Awaiting client", myCounts.delivered, null, "awaiting")}
           {card("Back to you", myCounts.needs_look, myCounts.needs_look ? "#B4640C" : null, "back")}
-          {card("Done this month", myCounts.done, "#177E4E", "done")}
+          {card("Done this quarter", doneQuarter, "#177E4E", "done")}
         </div>
 
         {/* due-date view (new, below) */}
@@ -212,7 +217,7 @@ export default function Dashboard() {
           {card("Open tasks", counts.open, null, "open")}
           {card("Due this week", counts.dueWeek, counts.dueWeek ? "#9A6B00" : null, "dueWeek")}
           {card("Overdue", counts.overdue, counts.overdue ? "#C0392B" : null, "overdue")}
-          {card("Awaiting client", counts.awaiting, "#7C3AED", "awaiting")}
+          {card("Unassigned tasks", unassigned, unassigned ? "#7C3AED" : null, "unassigned")}
         </div>
         {cardFilter && (
           <div className="card">
