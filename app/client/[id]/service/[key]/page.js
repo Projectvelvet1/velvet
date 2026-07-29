@@ -5,6 +5,7 @@ import { supabase } from "../../../../../lib/supabase";
 import Shell from "../../../../../components/Shell";
 import AgencyNav from "../../../../../components/AgencyNav";
 import Modal from "../../../../../components/Modal";
+import AddTask from "../../../../../components/AddTask";
 import { loadAgencyDepts, DEPARTMENTS } from "../../../../../lib/agencyNav";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +41,7 @@ export default function ClientServiceDashboard() {
   const [uid, setUid] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
   const svc = DEPARTMENTS.flatMap((d) => d.services).find((s) => s.key === key);
   const isSeo = key === "seo";
 
@@ -172,10 +174,9 @@ export default function ClientServiceDashboard() {
       <div className="card" style={{ marginTop: 12 }}>
         <b>{svc?.label} tasks for {ws?.name}</b>
         <div style={{ fontSize: 12, color: "var(--faint)", margin: "2px 0 10px" }}>The team's action plan for this client. Move items To do → In progress → Delivered.</div>
-        <form onSubmit={addTask} style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <input className="input" style={{ flex: 1 }} value={newTask} onChange={(e) => setNewTask(e.target.value)} placeholder="Add a task (e.g. Fix title tags on /promotions)" />
-          <button className="btn btn-ghost">Add task</button>
-        </form>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add task</button>
+        </div>
         {tasks.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>No tasks yet.</div>
           : tasks.map((t) => {
             const st = STATUS[t.status] || STATUS.todo;
@@ -219,6 +220,8 @@ export default function ClientServiceDashboard() {
           })()}
         </Modal>
       )}
+
+      {showAdd && <AddTask me={uid} fixedClient={{ id, name: ws?.name }} defaultServiceKey={key} onClose={() => setShowAdd(false)} onCreated={loadTasks} />}
 
       {showCompare && (
         <Modal title="You vs competitors" onClose={() => setShowCompare(false)}>
