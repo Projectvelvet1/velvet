@@ -102,10 +102,10 @@ export default function Dashboard() {
   function openMeta(c) { setMetaErr(""); setEditMeta({ id: c.id, name: c.name, health: c.health || "healthy", upsell: c.upsell || "", notes: c.notes || "" }); }
   async function saveMeta(e) {
     e.preventDefault(); setBusy(true);
-    const { data } = await supabase.auth.getSession();
-    const res = await fetch("/api/client-details", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: editMeta.id, health: editMeta.health, upsell: editMeta.upsell, notes: editMeta.notes }) });
+    const patch = { health: editMeta.health, upsell: (editMeta.upsell || "").trim() || null, notes: (editMeta.notes || "").trim() || null };
+    const { error } = await supabase.from("workspaces").update(patch).eq("id", editMeta.id);
     setBusy(false);
-    if (!res.ok) { const j = await res.json().catch(() => ({})); setMetaErr(j.error || "Could not save."); return; }
+    if (error) { setMetaErr(error.message || "Could not save."); return; }
     setMetaErr(""); setRichClients((cs) => cs.map((c) => c.id === editMeta.id ? { ...c, health: editMeta.health, upsell: editMeta.upsell, notes: editMeta.notes } : c)); setEditMeta(null);
   }
 

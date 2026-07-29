@@ -82,12 +82,27 @@ export default function ClientView({ workspace, services = [], profile, viewingA
 
   function openDetails() { setDErr(""); setDDraft({ website: wsLocal.website || "", industry: wsLocal.industry || "", startDate: wsLocal.start_date || "", leadName: wsLocal.lead_name || "", leadEmail: "" }); setShowDetails(true); }
   async function saveDetails(e) {
-    e.preventDefault(); setDBusy(true);
-    const { data } = await supabase.auth.getSession();
-    const res = await fetch("/api/client-details", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: wsLocal.id, ...dDraft }) });
-    setDBusy(false);
-    if (!res.ok) { const j = await res.json().catch(() => ({})); setDErr(j.error || "Could not save. Please try again."); return; }
-    setDErr(""); setWsLocal({ ...wsLocal, website: dDraft.website, industry: dDraft.industry, start_date: dDraft.startDate, lead_name: dDraft.leadName }); setShowDetails(false);
+    e.preventDefault(); setDBusy(true); setDErr("");
+    // write directly under the DB rule (no API route in the path)
+    const patch = {
+      website: (dDraft.website || "").trim() || null,
+      industry: (dDraft.industry || "").trim() || null,
+      start_date: (dDraft.startDate || "").trim() || null,
+      lead_name: (dDraft.leadName || "").trim() || null,
+    };
+    const { error } = await supabase.from("workspaces").update(patch).eq("id", wsLocal.id);
+    if (error) { setDBusy(false); setDErr(error.message || "Could not save."); return; }
+    // re-read from the DB so what we show is exactly what was saved
+    const { data: fresh } = await supabase.from("workspaces").select("website,industry,start_date,lead_name,health,upsell,notes").eq("id", wsLocal.id).single();
+    // optional lead-email change still needs the admin route (invite); best-effort
+    const le = (dDraft.leadEmail || "").trim();
+    if (le && le.includes("@")) {
+      const { data } = await supabase.auth.getSession();
+      await fetch("/api/client-details", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: wsLocal.id, leadEmail: le, leadName: dDraft.leadName }) }).catch(() => {});
+    }
+    setDBusy(false); setDErr("");
+    if (fresh) setWsLocal({ ...wsLocal, ...fresh });
+    setShowDetails(false);
   }
 
   function openFb() { setFbScores({}); setFbOverall(0); setFbAns({}); setFbDone(false); setShowFb(true); }
