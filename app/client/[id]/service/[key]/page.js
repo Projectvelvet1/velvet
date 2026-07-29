@@ -17,6 +17,16 @@ const DEMO_ITEMS = [
   { t: "Backlink cleanup", s: "Needs another look", bg: "#FDEBD3", fg: "#B4640C" },
 ];
 const DEMO_COMPARE = { traffic: "128k", kw: "1,240", bl: "64k" };
+function ymd(d) { return d.toISOString().slice(0, 10); }
+function quarterBounds(year, q) { const s = new Date(year, (q - 1) * 3, 1); const e = new Date(year, q * 3, 0); return [ymd(s), ymd(e)]; }
+function tabBounds(tab, qYear, qQuarter) {
+  const now = new Date(); const y = now.getFullYear(), m = now.getMonth();
+  if (tab === "today") { const t = ymd(now); return [t, t]; }
+  if (tab === "this_week") { const day = (now.getDay() + 6) % 7; const mon = new Date(now); mon.setDate(now.getDate() - day); const sun = new Date(mon); sun.setDate(mon.getDate() + 6); return [ymd(mon), ymd(sun)]; }
+  if (tab === "this_month") { return [ymd(new Date(y, m, 1)), ymd(new Date(y, m + 1, 0))]; }
+  if (tab === "this_quarter") { return quarterBounds(qYear, qQuarter); }
+  return null; // all
+}
 const STATUS = {
   todo: { label: "To do", bg: "#EEF0FF", fg: "#3B49C7" },
   in_progress: { label: "In progress", bg: "#FFF3D6", fg: "#9A6B00" },
@@ -42,6 +52,9 @@ export default function ClientServiceDashboard() {
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
   const [showAdd, setShowAdd] = useState(false);
+  const [taskTab, setTaskTab] = useState("all");
+  const [qYear, setQYear] = useState(new Date().getFullYear());
+  const [qQuarter, setQQuarter] = useState(Math.floor(new Date().getMonth() / 3) + 1);
   const svc = DEPARTMENTS.flatMap((d) => d.services).find((s) => s.key === key);
   const isSeo = key === "seo";
 
@@ -87,7 +100,7 @@ export default function ClientServiceDashboard() {
   }
 
   async function loadTasks() {
-    const { data } = await supabase.from("tasks").select("id,title,status,assignee_id,client_note,created_at").eq("workspace_id", id).eq("service_key", key).order("created_at", { ascending: true });
+    const { data } = await supabase.from("tasks").select("id,title,status,assignee_id,client_note,created_at,due_date,priority,updated_at").eq("workspace_id", id).in("service_key", [key, "general"]).order("created_at", { ascending: true });
     setTasks(data || []);
   }
   async function addTask(e) {
@@ -177,13 +190,35 @@ export default function ClientServiceDashboard() {
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
           <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add task</button>
         </div>
-        {tasks.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>No tasks yet.</div>
-          : tasks.map((t) => {
+
+        <div style={{ display: "flex", gap: 4, background: "var(--cloud,#F5F6F8)", padding: 4, borderRadius: 10, width: "fit-content", marginBottom: 10, flexWrap: "wrap" }}>
+          {[["all","All"],["today","Today"],["this_week","This week"],["this_month","This month"],["this_quarter","This quarter"]].map(([v,l]) => (
+            <button key={v} onClick={() => setTaskTab(v)} className="btn" style={{ padding: "6px 12px", fontSize: 13, background: taskTab === v ? "#fff" : "transparent", boxShadow: taskTab === v ? "0 1px 2px rgba(0,0,0,.06)" : "none", color: taskTab === v ? "var(--text)" : "var(--muted)" }}>{l}</button>
+          ))}
+        </div>
+
+        {taskTab === "this_quarter" && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+            <select className="input" style={{ width: "auto" }} value={qYear} onChange={(e) => setQYear(Number(e.target.value))}>
+              {Array.from({ length: 2040 - new Date().getFullYear() + 1 }, (_, i) => new Date().getFullYear() + i).map((yy) => <option key={yy} value={yy}>{yy}</option>)}
+            </select>
+            {[1,2,3,4].map((q) => (
+              <button key={q} onClick={() => setQQuarter(q)} className="btn" style={{ padding: "6px 12px", fontSize: 13, background: qQuarter === q ? "#0B0D12" : "transparent", color: qQuarter === q ? "#fff" : "var(--muted)", border: "0.5px solid var(--line)" }}>Q{q}</button>
+            ))}
+          </div>
+        )}
+
+        {(() => {
+          const b = tabBounds(taskTab, qYear, qQuarter);
+          const list = b ? tasks.filter((t) => t.due_date && t.due_date >= b[0] && t.due_date <= b[1]) : tasks;
+          if (list.length === 0) return <div style={{ fontSize: 13, color: "var(--faint)" }}>{b ? "No tasks with a due date in this period." : "No tasks yet."}</div>;
+          return list.map((t) => {
             const st = STATUS[t.status] || STATUS.todo;
             return (
               <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 0", borderTop: "0.5px solid var(--line)" }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 13 }}>{t.title}</div>
+                  <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 1 }}>{t.due_date ? "due " + t.due_date : "no due date"}{t.status === "delivered" ? " · submitted " + new Date(t.updated_at || t.created_at).toLocaleDateString() : ""}</div>
                   {t.status === "needs_look" && t.client_note && <div style={{ fontSize: 11, color: "#B4640C", marginTop: 2 }}>Client: {t.client_note}</div>}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
@@ -198,7 +233,8 @@ export default function ClientServiceDashboard() {
                 </div>
               </div>
             );
-          })}
+          });
+        })()}
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>

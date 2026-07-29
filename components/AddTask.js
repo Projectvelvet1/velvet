@@ -30,6 +30,7 @@ export default function AddTask({ me, clients = [], fixedClient = null, defaultS
   const [impBusy, setImpBusy] = useState(false);
   const [impMsg, setImpMsg] = useState("");
 
+  function svcForClient(cid) { const c = clients.find((x) => x.id === cid); return (c && c.serviceKey) || defaultServiceKey || "general"; }
   function matchClientId(name) {
     if (fixedClient) return fixedClient.id;
     if (!name) return null;
@@ -57,10 +58,10 @@ export default function AddTask({ me, clients = [], fixedClient = null, defaultS
       const res = await fetch("/api/tasks-import", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` }, body: JSON.stringify(payload) });
       const j = await res.json();
       if (!res.ok) { setImpMsg(j.error || "Import failed."); setImpBusy(false); return; }
-      const rows = (j.tasks || []).map((t) => ({
-        title: t.title, workspace_id: matchClientId(t.client), service_key: defaultServiceKey || "general",
+      const rows = (j.tasks || []).map((t) => { const wid = matchClientId(t.client); return {
+        title: t.title, workspace_id: wid, service_key: wid ? svcForClient(wid) : (defaultServiceKey || "general"),
         priority: "medium", frequency: "one_off", status: "todo", assignee_id: me, created_by: me,
-      }));
+      }; });
       if (!rows.length) { setImpMsg("No tasks were found."); setImpBusy(false); return; }
       const { error } = await supabase.from("tasks").insert(rows);
       setImpBusy(false);
@@ -74,7 +75,7 @@ export default function AddTask({ me, clients = [], fixedClient = null, defaultS
     if (!title.trim()) { setErr("Give the task a title."); return; }
     setBusy(true); setErr("");
     const row = {
-      title: title.trim(), workspace_id: clientId || null, service_key: defaultServiceKey || "general",
+      title: title.trim(), workspace_id: clientId || null, service_key: clientId ? svcForClient(clientId) : (defaultServiceKey || "general"),
       priority, frequency, due_date: dueDate || null, deliverable_link: link.trim() || null,
       description: desc.trim() || null, status: "todo", assignee_id: me, created_by: me,
     };

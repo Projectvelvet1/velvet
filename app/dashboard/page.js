@@ -45,6 +45,7 @@ export default function Dashboard() {
   const [myServiceLine, setMyServiceLine] = useState("");
   const [myTab, setMyTab] = useState("this_week");
   const [showAdd, setShowAdd] = useState(false);
+  const [cardFilter, setCardFilter] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -178,7 +179,18 @@ export default function Dashboard() {
     const queue = open.filter((t) => t.due_date && t.due_date >= ra && t.due_date <= rb)
       .sort((x, y) => (PRIO_W[y.priority] || 1) - (PRIO_W[x.priority] || 1) || (x.due_date || "").localeCompare(y.due_date || ""));
     const TABS = [["today", "Today"], ["this_week", "This week"], ["this_month", "This month"], ["this_quarter", "This quarter"]];
-    const card = (label, n, color) => (<div className="card" style={{ margin: 0 }}><div style={{ fontSize: 11, color: "var(--faint)" }}>{label}</div><div style={{ fontSize: 26, fontWeight: 600, color: color || "var(--text)" }}>{n}</div></div>);
+    const card = (label, n, color, fkey) => (<div className="card" style={{ margin: 0, cursor: fkey ? "pointer" : "default", outline: cardFilter === fkey ? "2px solid var(--gold, #F7C948)" : "none" }} onClick={fkey ? () => setCardFilter(cardFilter === fkey ? null : fkey) : undefined}><div style={{ fontSize: 11, color: "var(--faint)" }}>{label}</div><div style={{ fontSize: 26, fontWeight: 600, color: color || "var(--text)" }}>{n}</div></div>);
+    const thisMonth = (d) => { const x = new Date(d); const n = new Date(); return x.getFullYear() === n.getFullYear() && x.getMonth() === n.getMonth(); };
+    const FILTERS = {
+      in_progress: { label: "In progress", fn: (t) => t.status === "in_progress" },
+      awaiting: { label: "Awaiting client", fn: (t) => t.status === "delivered" },
+      back: { label: "Back to you", fn: (t) => t.status === "needs_look" },
+      done: { label: "Done this month", fn: (t) => t.status === "reviewed" && thisMonth(t.updated_at) },
+      open: { label: "Open tasks", fn: (t) => ["todo", "in_progress", "needs_look"].includes(t.status) },
+      dueWeek: { label: "Due this week", fn: (t) => { const [a, b] = rangeBounds("this_week"); return ["todo","in_progress","needs_look"].includes(t.status) && t.due_date && t.due_date >= a && t.due_date <= b; } },
+      overdue: { label: "Overdue", fn: (t) => ["todo","in_progress","needs_look"].includes(t.status) && t.due_date && t.due_date < today },
+    };
+    const filtered = cardFilter && FILTERS[cardFilter] ? myTasks.filter(FILTERS[cardFilter].fn) : [];
     return (
       <Shell profile={profile} roleLabel={roleLabel} nav={nav}>
         <div className="page-head">
@@ -189,19 +201,37 @@ export default function Dashboard() {
 
         {/* status view (existing) */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
-          {card("In progress", myCounts.in_progress)}
-          {card("Awaiting client", myCounts.delivered)}
-          {card("Back to you", myCounts.needs_look, myCounts.needs_look ? "#B4640C" : null)}
-          {card("Done this month", myCounts.done, "#177E4E")}
+          {card("In progress", myCounts.in_progress, null, "in_progress")}
+          {card("Awaiting client", myCounts.delivered, null, "awaiting")}
+          {card("Back to you", myCounts.needs_look, myCounts.needs_look ? "#B4640C" : null, "back")}
+          {card("Done this month", myCounts.done, "#177E4E", "done")}
         </div>
 
         {/* due-date view (new, below) */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 12 }}>
-          {card("Open tasks", counts.open)}
-          {card("Due this week", counts.dueWeek, counts.dueWeek ? "#9A6B00" : null)}
-          {card("Overdue", counts.overdue, counts.overdue ? "#C0392B" : null)}
-          {card("Awaiting client", counts.awaiting, "#7C3AED")}
+          {card("Open tasks", counts.open, null, "open")}
+          {card("Due this week", counts.dueWeek, counts.dueWeek ? "#9A6B00" : null, "dueWeek")}
+          {card("Overdue", counts.overdue, counts.overdue ? "#C0392B" : null, "overdue")}
+          {card("Awaiting client", counts.awaiting, "#7C3AED", "awaiting")}
         </div>
+        {cardFilter && (
+          <div className="card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <b>{FILTERS[cardFilter].label} · {filtered.length}</b>
+              <span style={{ cursor: "pointer", color: "var(--faint)" }} onClick={() => setCardFilter(null)}>✕ close</span>
+            </div>
+            {filtered.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>No tasks here.</div>
+              : filtered.map((t) => { const st = TSTATUS[t.status] || TSTATUS.todo; return (
+                <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "9px 0", borderTop: "0.5px solid var(--line)" }}>
+                  <div style={{ minWidth: 0 }}><div style={{ fontSize: 13 }}>{t.title}</div>
+                    <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 1 }}>{t.workspace_id ? t.client : "Personal"}{t.status === "delivered" ? " · submitted " + new Date(t.updated_at).toLocaleDateString() : (t.due_date ? " · due " + t.due_date : "")}</div></div>
+                  <span style={{ display: "flex", gap: 6, alignItems: "center", flex: "none" }}>
+                    <span className="pill" style={{ background: st.bg, color: st.fg }}>{st.l}</span>
+                    {t.workspace_id && <button className="btn btn-ghost" onClick={() => router.push(`/client/${t.workspace_id}/service/${t.service_key}`)}>Open</button>}
+                  </span>
+                </div>); })}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 4, background: "var(--cloud,#F5F6F8)", padding: 4, borderRadius: 10, width: "fit-content", marginBottom: 10 }}>
           {TABS.map(([v, l]) => (<button key={v} onClick={() => setMyTab(v)} className="btn" style={{ padding: "6px 12px", fontSize: 13, background: myTab === v ? "#fff" : "transparent", boxShadow: myTab === v ? "0 1px 2px rgba(0,0,0,.06)" : "none", color: myTab === v ? "var(--text)" : "var(--muted)" }}>{l}</button>))}
         </div>
