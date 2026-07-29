@@ -10,6 +10,8 @@ import AgencyNav from "../../components/AgencyNav";
 
 const HEALTH = { healthy: { label: "Healthy", bg: "#E4F6EC", fg: "#177E4E" }, watch: { label: "To watch", bg: "#FDEBD3", fg: "#B4640C" }, risk: { label: "At risk", bg: "#FBEAE6", fg: "#C0392B" } };
 const DEPT_COLOR = { Performance: "#C0392B", Content: "#7C3AED", Analytics: "#1E7F5C" };
+const SVC_DEPT = { paid_media:"Performance", seo:"Performance", aso:"Performance", creative_strategy:"Content", asset_production:"Content", ugc:"Content", tracking:"Analytics", dashboarding:"Analytics" };
+const DEPT_ORDER = ["Performance","Content","Analytics"];
 
 export default function Dashboard() {
   const router = useRouter();
@@ -17,22 +19,20 @@ export default function Dashboard() {
   const [profile, setProfile] = useState(null);
   const [clientWorkspace, setClientWorkspace] = useState(null);
   const [clientServices, setClientServices] = useState([]);
-  const [activeClients, setActiveClients] = useState([]);
   const [richClients, setRichClients] = useState([]);
   const [depts, setDepts] = useState([]);
   const [seesAll, setSeesAll] = useState(false);
   const [editMeta, setEditMeta] = useState(null);
   const [busy, setBusy] = useState(false);
   const [metaErr, setMetaErr] = useState("");
-  const [dashNote, setDashNote] = useState("");
 
   useEffect(() => {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.replace("/login"); return; }
       const uid = session.user.id;
-      const { data: prof } = await supabase.from("profiles").select("full_name,email,side,is_super_admin").eq("id", uid).single();
-      const p = prof || { email: session.user.email, side: "agency" };
+      const { data: prof } = await supabase.from("profiles").select("id,full_name,email,side,is_super_admin").eq("id", uid).single();
+      const p = prof || { id: uid, email: session.user.email, side: "agency" };
       setProfile(p);
 
       if (p.side === "client") {
@@ -45,27 +45,55 @@ export default function Dashboard() {
         setLoading(false); return;
       }
 
+      // agency: read everything client-side (super admin RLS sees all; project lead sees their own)
       const { data: ws } = await supabase.from("workspaces")
-        .select("id,name,is_demo,phase,onboarding_complete,project_lead_id,start_date").order("created_at", { ascending: true });
+        .select("id,name,is_demo,phase,onboarding_complete,project_lead_id,industry,website,start_date,lead_name,health,upsell,notes")
+        .order("created_at", { ascending: true });
       const all = ws || [];
-      setActiveClients(all.filter((w) => w.phase === "signed" && w.onboarding_complete));
       const isProjectLead = all.some((w) => w.project_lead_id === uid);
       const all3 = !!p.is_super_admin || isProjectLead;
       setSeesAll(all3);
-      const { data: assigns } = await supabase.from("service_assignments").select("service_key").eq("profile_id", uid);
-      const assignedServiceKeys = new Set((assigns || []).map((a) => a.service_key));
-      setDepts(departmentsForRole({ seesAll: all3, assignedServiceKeys }));
+      const { data: assignsMine } = await supabase.from("service_assignments").select("service_key").eq("profile_id", uid);
+      setDepts(departmentsForRole({ seesAll: all3, assignedServiceKeys: new Set((assignsMine || []).map((a) => a.service_key)) }));
 
-      if (all3) {
-        try {
-          const res = await fetch("/api/dashboard-clients", { headers: { Authorization: `Bearer ${session.access_token}` } });
-          const text = await res.text();
-          let j = {}; try { j = JSON.parse(text); } catch {}
-          if (res.ok) { setRichClients(j.clients || []); setDashNote(j.note || ""); }
-          else { setDashNote(`The clients service returned status ${res.status}. ${j.error || j.debug || text.slice(0, 200)}`); }
-        } catch (e) {
-          setDashNote("Could not reach the clients service: " + (e?.message || String(e)));
-        }
+      // active = signed + onboarding complete; project lead limited to their own
+      let active = all.filter((w) => w.phase === "signed" && w.onboarding_complete);
+      if (!p.is_super_admin) active = active.filter((w) => w.project_lead_id === uid);
+
+      if (active.length) {
+        const ids = active.map((w) => w.id);
+        const [{ data: svcs }, { data: asg }, { data: subs }] = await Promise.all([
+          supabase.from("client_services").select("workspace_id,service_key,service_label").in("workspace_id", ids),
+          supabase.from("service_assignments").select("workspace_id,service_key,profile_id").in("workspace_id", ids),
+          supabase.from("feedback_submissions").select("workspace_id,overall_score,created_at").in("workspace_id", ids).order("created_at", { ascending: false }),
+        ]);
+        const leadIds = active.map((w) => w.project_lead_id).filter(Boolean);
+        const profIds = [...new Set([...(asg || []).map((a) => a.profile_id), ...leadIds])];
+        const { data: profs } = profIds.length ? await supabase.from("profiles").select("id,full_name,email").in("id", profIds) : { data: [] };
+        const nameOf = (id) => { const pr = (profs || []).find((x) => x.id === id); return pr ? (pr.full_name || pr.email) : "Unknown"; };
+
+        const built = active.map((w) => {
+          const services = (svcs || []).filter((s) => s.workspace_id === w.id);
+          const byDept = {};
+          (asg || []).filter((a) => a.workspace_id === w.id).forEach((a) => {
+            const dept = SVC_DEPT[a.service_key] || "Other";
+            const label = services.find((s) => s.service_key === a.service_key)?.service_label || a.service_key;
+            (byDept[dept] = byDept[dept] || []).push(`${nameOf(a.profile_id)} (${label})`);
+          });
+          const team = DEPT_ORDER.filter((d) => byDept[d]).map((d) => ({ dept: d, members: [...new Set(byDept[d])] }));
+          const fb = (subs || []).find((s) => s.workspace_id === w.id) || null;
+          return {
+            id: w.id, name: w.name, is_demo: w.is_demo, industry: w.industry, website: w.website, start_date: w.start_date,
+            lead_name: w.lead_name || (w.project_lead_id ? nameOf(w.project_lead_id) : null),
+            health: w.health || "healthy", upsell: w.upsell || "", notes: w.notes || "",
+            services: services.map((s) => s.service_label),
+            team, feedback: fb ? { overall: fb.overall_score, date: fb.created_at } : null,
+            canEditMeta: !!p.is_super_admin || w.project_lead_id === uid,
+          };
+        });
+        setRichClients(built);
+      } else {
+        setRichClients([]);
       }
       setLoading(false);
     })();
@@ -77,7 +105,7 @@ export default function Dashboard() {
     const { data } = await supabase.auth.getSession();
     const res = await fetch("/api/client-details", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: editMeta.id, health: editMeta.health, upsell: editMeta.upsell, notes: editMeta.notes }) });
     setBusy(false);
-    if (!res.ok) { const j = await res.json().catch(() => ({})); setMetaErr(j.error || "Could not save. Please try again."); return; }
+    if (!res.ok) { const j = await res.json().catch(() => ({})); setMetaErr(j.error || "Could not save."); return; }
     setMetaErr(""); setRichClients((cs) => cs.map((c) => c.id === editMeta.id ? { ...c, health: editMeta.health, upsell: editMeta.upsell, notes: editMeta.notes } : c)); setEditMeta(null);
   }
 
@@ -89,7 +117,6 @@ export default function Dashboard() {
     return <ClientView workspace={clientWorkspace} services={clientServices} profile={profile} />;
   }
 
-  const firstName = (profile?.full_name || profile?.email || "there").split(" ")[0].split("@")[0];
   const roleLabel = profile?.is_super_admin ? "Super admin" : "Team member";
   const nav = <AgencyNav profile={profile} active="dashboard" depts={depts} />;
 
@@ -100,67 +127,57 @@ export default function Dashboard() {
         <span className="pill p-agency">{roleLabel}</span>
       </div>
 
-      {dashNote && <div className="card" style={{ borderColor: "var(--border-accent)", background: "#FEFBF2" }}><b>Heads up</b><div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4 }}>{dashNote}</div></div>}
-      {seesAll ? (
-        richClients.length === 0 ? <div className="empty">No active clients yet. Clients appear here once their onboarding is complete.</div>
-        : richClients.map((c) => {
-          const h = HEALTH[c.health] || HEALTH.healthy;
-          return (
-            <div className="card" key={c.id}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-                <div><b style={{ fontSize: 16 }}>{c.name}</b>{c.is_demo && <span className="pill p-agency" style={{ marginLeft: 6 }}>demo</span>}
-                  <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 2 }}>{[c.industry, c.website, c.start_date ? "since " + c.start_date : null].filter(Boolean).join(" · ") || "No details yet"}</div></div>
-                <span className="pill" style={{ background: h.bg, color: h.fg }}>{h.label}</span>
+      {richClients.length === 0 ? (
+        <div className="empty">No active clients yet. Clients appear here once their onboarding is complete.</div>
+      ) : richClients.map((c) => {
+        const h = HEALTH[c.health] || HEALTH.healthy;
+        return (
+          <div className="card" key={c.id}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+              <div><b style={{ fontSize: 16 }}>{c.name}</b>{c.is_demo && <span className="pill p-agency" style={{ marginLeft: 6 }}>demo</span>}
+                <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 2 }}>{[c.industry, c.website, c.start_date ? "since " + c.start_date : null].filter(Boolean).join(" · ") || "No details yet"}</div></div>
+              <span className="pill" style={{ background: h.bg, color: h.fg }}>{h.label}</span>
+            </div>
+
+            {c.services.length > 0 && <>
+              <div style={{ fontSize: 11, color: "var(--faint)", marginBottom: 5 }}>Services</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                {c.services.map((s) => <span key={s} className="pill p-agency">{s}</span>)}
               </div>
+            </>}
 
-              {c.services.length > 0 && <>
-                <div style={{ fontSize: 11, color: "var(--faint)", marginBottom: 5 }}>Services</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
-                  {c.services.map((s) => <span key={s} className="pill p-agency">{s}</span>)}
-                </div>
-              </>}
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-                <div style={{ background: "var(--cloud, #F5F6F8)", borderRadius: 10, padding: 11 }}>
-                  <div style={{ fontSize: 11, color: "var(--faint)", marginBottom: 6 }}>Team by department</div>
-                  {c.team.length === 0 ? <div style={{ fontSize: 12, color: "var(--faint)" }}>No one assigned yet</div>
-                    : c.team.map((d) => <div key={d.dept} style={{ fontSize: 12, marginBottom: 3 }}><b style={{ color: DEPT_COLOR[d.dept] || "var(--text)" }}>{d.dept}</b> · {d.members.join(", ")}</div>)}
-                </div>
-                <div style={{ background: "var(--cloud, #F5F6F8)", borderRadius: 10, padding: 11 }}>
-                  <div style={{ fontSize: 11, color: "var(--faint)", marginBottom: 6 }}>Latest feedback</div>
-                  {c.feedback ? <><div style={{ display: "flex", alignItems: "baseline", gap: 6 }}><span style={{ fontSize: 22, fontWeight: 600 }}>{c.feedback.overall ?? "—"}</span><span style={{ fontSize: 11, color: "var(--faint)" }}>/10 overall</span></div>
-                    <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 2 }}>{new Date(c.feedback.date).toLocaleDateString()} · <span style={{ color: "#2557C7", cursor: "pointer" }} onClick={() => router.push("/feedback")}>View history</span></div></>
-                    : <div style={{ fontSize: 12, color: "var(--faint)" }}>None yet</div>}
-                </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div style={{ background: "var(--cloud, #F5F6F8)", borderRadius: 10, padding: 11 }}>
+                <div style={{ fontSize: 11, color: "var(--faint)", marginBottom: 6 }}>Team by department</div>
+                {c.team.length === 0 ? <div style={{ fontSize: 12, color: "var(--faint)" }}>No one assigned yet</div>
+                  : c.team.map((d) => <div key={d.dept} style={{ fontSize: 12, marginBottom: 3 }}><b style={{ color: DEPT_COLOR[d.dept] || "var(--text)" }}>{d.dept}</b> · {d.members.join(", ")}</div>)}
               </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div style={{ border: "0.5px solid #F0D9A6", background: "#FEFBF2", borderRadius: 10, padding: 11 }}>
-                  <div style={{ fontSize: 11, color: "#9A6B00", marginBottom: 5 }}>Upsell opportunities</div>
-                  <div style={{ fontSize: 12, color: c.upsell ? "var(--text)" : "var(--faint)" }}>{c.upsell || "None noted"}</div>
-                </div>
-                <div style={{ border: "0.5px solid var(--line)", borderRadius: 10, padding: 11 }}>
-                  <div style={{ fontSize: 11, color: "var(--faint)", marginBottom: 5 }}>Notes</div>
-                  <div style={{ fontSize: 12, color: c.notes ? "var(--text)" : "var(--faint)" }}>{c.notes || "No notes"}</div>
-                </div>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
-                {c.canEditMeta && <button className="btn btn-ghost" onClick={() => openMeta(c)}>Edit health / upsell / notes</button>}
-                <button className="btn btn-primary" onClick={() => router.push(`/client/${c.id}`)}>Open client →</button>
+              <div style={{ background: "var(--cloud, #F5F6F8)", borderRadius: 10, padding: 11 }}>
+                <div style={{ fontSize: 11, color: "var(--faint)", marginBottom: 6 }}>Latest feedback</div>
+                {c.feedback ? <><div style={{ display: "flex", alignItems: "baseline", gap: 6 }}><span style={{ fontSize: 22, fontWeight: 600 }}>{c.feedback.overall ?? "—"}</span><span style={{ fontSize: 11, color: "var(--faint)" }}>/10 overall</span></div>
+                  <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 2 }}>{new Date(c.feedback.date).toLocaleDateString()} · <span style={{ color: "#2557C7", cursor: "pointer" }} onClick={() => router.push("/feedback")}>View history</span></div></>
+                  : <div style={{ fontSize: 12, color: "var(--faint)" }}>None yet</div>}
               </div>
             </div>
-          );
-        })
-      ) : (
-        activeClients.length === 0 ? <div className="empty">No active clients yet. Clients appear here once their onboarding is complete.</div>
-        : activeClients.map((w) => (
-          <div className="card" key={w.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/client/${w.id}`)}>
-            <b>{w.name}</b>{w.is_demo && <span className="pill p-agency" style={{ marginLeft: 6 }}>demo</span>}
-            <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 4 }}>Active · onboarding complete</div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ border: "0.5px solid #F0D9A6", background: "#FEFBF2", borderRadius: 10, padding: 11 }}>
+                <div style={{ fontSize: 11, color: "#9A6B00", marginBottom: 5 }}>Upsell opportunities</div>
+                <div style={{ fontSize: 12, color: c.upsell ? "var(--text)" : "var(--faint)" }}>{c.upsell || "None noted"}</div>
+              </div>
+              <div style={{ border: "0.5px solid var(--line)", borderRadius: 10, padding: 11 }}>
+                <div style={{ fontSize: 11, color: "var(--faint)", marginBottom: 5 }}>Notes</div>
+                <div style={{ fontSize: 12, color: c.notes ? "var(--text)" : "var(--faint)" }}>{c.notes || "No notes"}</div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
+              {c.canEditMeta && <button className="btn btn-ghost" onClick={() => openMeta(c)}>Edit health / upsell / notes</button>}
+              <button className="btn btn-primary" onClick={() => router.push(`/client/${c.id}`)}>Open client →</button>
+            </div>
           </div>
-        ))
-      )}
+        );
+      })}
 
       {editMeta && (
         <Modal title={`Edit ${editMeta.name}`} onClose={() => setEditMeta(null)}>
@@ -170,9 +187,9 @@ export default function Dashboard() {
                 <option value="healthy">Healthy</option><option value="watch">To watch</option><option value="risk">At risk</option>
               </select></div>
             <div className="field"><label>Upsell opportunities</label>
-              <textarea className="input" rows={2} value={editMeta.upsell} onChange={(e) => setEditMeta({ ...editMeta, upsell: e.target.value })} placeholder="e.g. Creative Strategy retainer" /></div>
+              <textarea className="input" rows={2} value={editMeta.upsell} onChange={(e) => setEditMeta({ ...editMeta, upsell: e.target.value })} /></div>
             <div className="field"><label>Notes</label>
-              <textarea className="input" rows={3} value={editMeta.notes} onChange={(e) => setEditMeta({ ...editMeta, notes: e.target.value })} placeholder="Internal notes about this client" /></div>
+              <textarea className="input" rows={3} value={editMeta.notes} onChange={(e) => setEditMeta({ ...editMeta, notes: e.target.value })} /></div>
             {metaErr && <div className="auth-msg auth-err">{metaErr}</div>}
             <button className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
           </form>
