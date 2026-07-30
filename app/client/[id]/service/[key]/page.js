@@ -151,9 +151,9 @@ export default function ClientServiceDashboard() {
       </div>
 
       <div className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}><b>LLM visibility</b><span className="pill p-agency">demo · Brand Radar</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}><b>Ahrefs overview</b><span className="pill p-agency">demo · Ahrefs</span></div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
-          {[["Citations","312"],["Mentions","1,940"],["Sentiment","+0.42"],["Brand voice","68%"]].map(([k, v]) => (
+          {[["Organic traffic","128k"],["Organic keywords","1,240"],["Domain Rating (DR)","62"],["Total backlinks","64k"]].map(([k, v]) => (
             <div key={k} style={{ background: "var(--cloud,#F5F6F8)", borderRadius: 10, padding: 10 }}><div style={{ fontSize: 11, color: "var(--faint)" }}>{k}</div><div style={{ fontSize: 18, fontWeight: 600 }}>{v}</div></div>
           ))}
         </div>
