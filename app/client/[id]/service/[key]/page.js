@@ -52,6 +52,7 @@ export default function ClientServiceDashboard() {
   const [uid, setUid] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
+  const [ahrefs, setAhrefs] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showAssign, setShowAssign] = useState(false);
   const [agencyPeople, setAgencyPeople] = useState([]);
@@ -80,6 +81,10 @@ export default function ClientServiceDashboard() {
       const { data: w } = await supabase.from("workspaces").select("id,name,industry,website,start_date,project_lead_id").eq("id", id).single();
       if (!w) { router.replace("/dashboard"); return; }
       setWs(w);
+      if (w.website) {
+        fetch(`/api/ahrefs?target=${encodeURIComponent(w.website)}`, { headers: { Authorization: `Bearer ${session.access_token}` } })
+          .then((r) => r.json()).then((j) => setAhrefs(j)).catch(() => {});
+      }
       setCanEdit(!!prof.is_super_admin || w.project_lead_id === uid || true); // agency members on the client may edit; RLS enforces
       const { data: asg } = await supabase.from("service_assignments").select("profile_id").eq("workspace_id", id).eq("service_key", key);
       const ids = [...new Set((asg || []).map((a) => a.profile_id))];
@@ -151,12 +156,23 @@ export default function ClientServiceDashboard() {
       </div>
 
       <div className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}><b>Ahrefs overview</b><span className="pill p-agency">demo · Ahrefs</span></div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
-          {[["Organic traffic","128k"],["Organic keywords","1,240"],["Domain Rating (DR)","62"],["Total backlinks","64k"]].map(([k, v]) => (
-            <div key={k} style={{ background: "var(--cloud,#F5F6F8)", borderRadius: 10, padding: 10 }}><div style={{ fontSize: 11, color: "var(--faint)" }}>{k}</div><div style={{ fontSize: 18, fontWeight: 600 }}>{v}</div></div>
-          ))}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <b>Ahrefs overview</b>
+          <span className="pill p-agency">{ahrefs?.ok ? "live · Ahrefs" : "demo · Ahrefs"}</span>
         </div>
+        {(() => {
+          const fmt = (n) => (n == null ? "—" : n >= 1000000 ? (n / 1000000).toFixed(1) + "m" : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n));
+          const live = ahrefs?.ok;
+          const cells = live
+            ? [["Organic traffic", fmt(ahrefs.org_traffic)], ["Organic keywords", fmt(ahrefs.org_keywords)], ["Domain Rating (DR)", ahrefs.domain_rating != null ? Math.round(ahrefs.domain_rating) : "—"], ["Total backlinks", fmt(ahrefs.backlinks)]]
+            : [["Organic traffic", "128k"], ["Organic keywords", "1,240"], ["Domain Rating (DR)", "62"], ["Total backlinks", "64k"]];
+          return (<>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+              {cells.map(([k, v]) => (<div key={k} style={{ background: "var(--cloud,#F5F6F8)", borderRadius: 10, padding: 10 }}><div style={{ fontSize: 11, color: "var(--faint)" }}>{k}</div><div style={{ fontSize: 18, fontWeight: 600 }}>{v}</div></div>))}
+            </div>
+            {ahrefs && !ahrefs.ok && <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 8 }}>{ahrefs.error === "no_key" ? "Showing sample data — add AHREFS_API_KEY to go live." : ahrefs.error === "no_target" ? "Add this client's website to pull live data." : "Couldn't reach Ahrefs — showing sample data."}</div>}
+          </>);
+        })()}
       </div>
 
       {isSeo && (
