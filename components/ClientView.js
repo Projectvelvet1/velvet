@@ -34,6 +34,9 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   const [showAssign, setShowAssign] = useState(false);
   const [cvAgency, setCvAgency] = useState([]);
   const [cvClient, setCvClient] = useState([]);
+  const [team, setTeam] = useState(null);
+  const [tName, setTName] = useState(""); const [tEmail, setTEmail] = useState(""); const [tSvc, setTSvc] = useState("");
+  const [teamBusy, setTeamBusy] = useState(false); const [teamErr, setTeamErr] = useState(""); const [teamMsg, setTeamMsg] = useState("");
   const [answers, setAnswers] = useState({});
   const [hasAny, setHasAny] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
@@ -63,18 +66,25 @@ export default function ClientView({ workspace, services = [], profile, viewingA
     setSvcPeople(map);
   }
   useEffect(() => { if (viewingAs && workspace?.id) loadAssignments(); }, [viewingAs, workspace?.id]);
-  useEffect(() => {
-    (async () => {
-      if (viewingAs || !workspace?.id) return; // client's own portal only
-      const { data: { user } } = await supabase.auth.getUser();
-      setMeId(user?.id || null);
-      const { data: mem } = await supabase.from("memberships").select("profile_id").eq("workspace_id", workspace.id);
-      const ids = [...new Set((mem || []).map((m) => m.profile_id))];
-      const { data: profs } = ids.length ? await supabase.from("profiles").select("id,full_name,email,side").in("id", ids) : { data: [] };
-      setCvAgency((profs || []).filter((x) => x.side === "agency").map((x) => ({ id: x.id, name: x.full_name || x.email })));
-      setCvClient((profs || []).filter((x) => x.side === "client").map((x) => ({ id: x.id, name: x.full_name || x.email })));
-    })();
-  }, [viewingAs, workspace?.id]);
+  async function loadTeam() {
+    if (viewingAs || !workspace?.id) return;
+    const { data: sess } = await supabase.auth.getSession();
+    const { data: { user } } = await supabase.auth.getUser();
+    setMeId(user?.id || null);
+    const res = await fetch(`/api/client-team?workspaceId=${workspace.id}`, { headers: { Authorization: `Bearer ${sess.session?.access_token}` } });
+    if (res.ok) { const j = await res.json(); setTeam(j); setCvAgency(j.agencyPeople || []); setCvClient(j.clientPeople || []); }
+  }
+  useEffect(() => { if (!viewingAs && workspace?.id) loadTeam(); }, [viewingAs, workspace?.id]);
+  async function addTeam(e) {
+    e.preventDefault(); setTeamErr(""); setTeamMsg("");
+    if (!tName.trim() || !tEmail.trim() || !tSvc) { setTeamErr("Add a name, company email and the service they handle."); return; }
+    setTeamBusy(true);
+    const { data: sess } = await supabase.auth.getSession();
+    const res = await fetch("/api/client-team", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${sess.session?.access_token}` }, body: JSON.stringify({ workspaceId: workspace.id, fullName: tName.trim(), email: tEmail.trim(), service: tSvc }) });
+    const j = await res.json(); setTeamBusy(false);
+    if (!res.ok) { setTeamErr(j.error || "Could not add."); return; }
+    setTName(""); setTEmail(""); setTSvc(""); setTeamMsg("Invite sent — they'll set a password from the email."); loadTeam();
+  }
 
   async function addAssignee(serviceKey, profileId) {
     if (!profileId) return;
@@ -358,12 +368,36 @@ export default function ClientView({ workspace, services = [], profile, viewingA
           {answersSection}
           {viewingAs ? deptDrilldown : (
             <>
-              <h3 style={{ fontSize: 16, margin: "22px 0 10px" }}>Your services</h3>
-              {services.map((s) => (
+              <h3 style={{ fontSize: 16, margin: "22px 0 10px" }}>Your services &amp; who handles them</h3>
+              {(team?.agencyByService || services.map((s) => ({ service_key: s.service_key, service_label: s.service_label, department: DEPT_LABEL[s.department], people: [] }))).map((s) => (
                 <div className={"card svc-card svc svc-" + s.service_key} key={s.service_key} style={{ cursor: "pointer" }} onClick={() => router.push(`/client/${workspace.id}/service/${s.service_key}`)}>
-                  <b>{s.service_label}</b><div style={{ color: "var(--muted)", fontSize: 13, marginTop: 2 }}>{DEPT_LABEL[s.department]}</div>
+                  <b>{s.service_label}</b>
+                  <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 3 }}>{s.people && s.people.length ? "Your agency team: " + s.people.map((x) => x.name).join(", ") : "Team being assigned"}</div>
                 </div>
               ))}
+
+              <h3 style={{ fontSize: 16, margin: "22px 0 10px" }}>Your team</h3>
+              <div className="card">
+                <div style={{ fontSize: 12, color: "var(--faint)", marginBottom: 8 }}>Add your colleagues. Everyone you add gets the same access you have, and can assign tasks to your agency team.</div>
+                {(team?.clientTeam || []).length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)", marginBottom: 10 }}>No teammates added yet.</div>
+                  : (team.clientTeam).map((m) => {
+                      const lbl = (services.find((x) => x.service_key === m.service)?.service_label) || m.service || "—";
+                      return <div key={m.id} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: "0.5px solid var(--line)", fontSize: 13 }}><span>{m.name} <span style={{ color: "var(--faint)" }}>· {m.email}</span></span><span className="pill p-agency">{lbl}</span></div>;
+                    })}
+                <form onSubmit={addTeam} style={{ marginTop: 12 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <input className="input" value={tName} onChange={(e) => setTName(e.target.value)} placeholder="Full name" />
+                    <input className="input" type="email" value={tEmail} onChange={(e) => setTEmail(e.target.value)} placeholder="Company email" />
+                  </div>
+                  <select className="input" style={{ marginTop: 8 }} value={tSvc} onChange={(e) => setTSvc(e.target.value)}>
+                    <option value="">Service they handle…</option>
+                    {services.map((x) => <option key={x.service_key} value={x.service_key}>{x.service_label}</option>)}
+                  </select>
+                  {teamErr && <div className="auth-msg auth-err" style={{ marginTop: 8 }}>{teamErr}</div>}
+                  {teamMsg && <div style={{ fontSize: 12, color: "#177E4E", marginTop: 8 }}>{teamMsg}</div>}
+                  <button className="btn btn-primary" style={{ marginTop: 10 }} disabled={teamBusy}>{teamBusy ? "Adding…" : "Add teammate"}</button>
+                </form>
+              </div>
             </>
           )}
         </>
