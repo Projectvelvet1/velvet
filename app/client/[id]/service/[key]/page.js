@@ -17,7 +17,6 @@ const DEMO_ITEMS = [
   { t: "Meta descriptions rewrite", s: "Delivered", bg: "#E7F0FF", fg: "#2557C7" },
   { t: "Backlink cleanup", s: "Needs another look", bg: "#FDEBD3", fg: "#B4640C" },
 ];
-const DEMO_COMPARE = { traffic: "128k", kw: "1,240", bl: "64k" };
 function ymd(d) { return d.toISOString().slice(0, 10); }
 function quarterBounds(year, q) { const s = new Date(year, (q - 1) * 3, 1); const e = new Date(year, q * 3, 0); return [ymd(s), ymd(e)]; }
 function tabBounds(tab, qYear, qQuarter) {
@@ -53,6 +52,10 @@ export default function ClientServiceDashboard() {
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
   const [ahrefs, setAhrefs] = useState(null);
+  const [kw, setKw] = useState(null);
+  const [topPages, setTopPages] = useState(null);
+  const [compareData, setCompareData] = useState(null);
+  const [compareBusy, setCompareBusy] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [showAssign, setShowAssign] = useState(false);
   const [agencyPeople, setAgencyPeople] = useState([]);
@@ -82,8 +85,11 @@ export default function ClientServiceDashboard() {
       if (!w) { router.replace("/dashboard"); return; }
       setWs(w);
       if (w.website) {
-        fetch(`/api/ahrefs?target=${encodeURIComponent(w.website)}`, { headers: { Authorization: `Bearer ${session.access_token}` } })
-          .then((r) => r.json()).then((j) => setAhrefs(j)).catch(() => {});
+        const enc = encodeURIComponent(w.website);
+        const H = { Authorization: `Bearer ${session.access_token}` };
+        fetch(`/api/ahrefs?target=${enc}`, { headers: H }).then((r) => r.json()).then((j) => setAhrefs(j)).catch(() => {});
+        fetch(`/api/ahrefs?kind=keywords&target=${enc}`, { headers: H }).then((r) => r.json()).then((j) => setKw(j)).catch(() => {});
+        fetch(`/api/ahrefs?kind=pages&target=${enc}`, { headers: H }).then((r) => r.json()).then((j) => setTopPages(j)).catch(() => {});
       }
       setCanEdit(!!prof.is_super_admin || w.project_lead_id === uid || true); // agency members on the client may edit; RLS enforces
       const { data: asg } = await supabase.from("service_assignments").select("profile_id").eq("workspace_id", id).eq("service_key", key);
@@ -124,6 +130,19 @@ export default function ClientServiceDashboard() {
   async function delTask(taskId) {
     await supabase.from("tasks").delete().eq("id", taskId);
     loadTasks();
+  }
+
+  async function openCompare() {
+    setShowCompare(true); setCompareBusy(true); setCompareData(null);
+    const { data: sess } = await supabase.auth.getSession();
+    const H = { Authorization: `Bearer ${sess.session?.access_token}` };
+    const targets = [{ name: (ws?.name || "You") + " (you)", domain: ws?.website, you: true }, ...comps.map((c) => ({ name: c.name, domain: c.name }))];
+    const rows = await Promise.all(targets.map(async (t) => {
+      if (!t.domain) return { ...t, org_traffic: null, org_keywords: null, backlinks: null };
+      try { const r = await fetch(`/api/ahrefs?target=${encodeURIComponent(t.domain)}`, { headers: H }); const j = await r.json(); return { ...t, org_traffic: j.org_traffic, org_keywords: j.org_keywords, backlinks: j.backlinks, ok: j.ok }; }
+      catch { return { ...t, org_traffic: null }; }
+    }));
+    setCompareData(rows); setCompareBusy(false);
   }
 
   if (loading) return <div className="center">Loading…</div>;
@@ -175,16 +194,21 @@ export default function ClientServiceDashboard() {
         })()}
       </div>
 
-      {isSeo && (
+      {isSeo && (() => {
+        const fmt = (n) => (n == null ? "—" : n >= 1000000 ? (n / 1000000).toFixed(1) + "m" : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n));
+        const kwLive = kw?.ok, pgLive = topPages?.ok;
+        const kwRows = kwLive ? kw.keywords.map((k) => [k.keyword, fmt(k.traffic)]) : [["betika login","1,290"],["betika app","870"],["aviator betika","540"],["betika jackpot","410"],["betika bonus","300"]];
+        const pgRows = pgLive ? topPages.pages.map((x) => { let u = x.url || ""; try { u = new URL(x.url).pathname || x.url; } catch {} return [u, fmt(x.traffic)]; }) : [["/login","1,540"],["/aviator","910"],["/promotions","620"],["/jackpot","480"],["/casino","360"]];
+        return (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
-          <div className="card" style={{ margin: 0 }}><b style={{ fontSize: 13 }}>Top 5 queries</b><span className="pill p-agency" style={{ marginLeft: 6 }}>demo</span>
-            <div style={{ marginTop: 8, fontSize: 12 }}>{[["betika login","1,290"],["betika app","870"],["aviator betika","540"],["betika jackpot","410"],["betika bonus","300"]].map(([q, n]) => (
-              <div key={q} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderTop: "0.5px solid var(--line)" }}><span>{q}</span><span style={{ color: "var(--faint)" }}>{n}</span></div>))}</div></div>
-          <div className="card" style={{ margin: 0 }}><b style={{ fontSize: 13 }}>Top 5 pages</b><span className="pill p-agency" style={{ marginLeft: 6 }}>demo</span>
-            <div style={{ marginTop: 8, fontSize: 12 }}>{[["/login","1,540"],["/aviator","910"],["/promotions","620"],["/jackpot","480"],["/casino","360"]].map(([q, n]) => (
-              <div key={q} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderTop: "0.5px solid var(--line)" }}><span>{q}</span><span style={{ color: "var(--faint)" }}>{n}</span></div>))}</div></div>
-        </div>
-      )}
+          <div className="card" style={{ margin: 0 }}><b style={{ fontSize: 13 }}>Top 5 queries</b><span className="pill p-agency" style={{ marginLeft: 6 }}>{kwLive ? "live · Ahrefs" : "demo"}</span>
+            <div style={{ marginTop: 8, fontSize: 12 }}>{kwRows.length === 0 ? <div style={{ color: "var(--faint)" }}>No keyword data.</div> : kwRows.map(([q, n], i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderTop: "0.5px solid var(--line)" }}><span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{q}</span><span style={{ color: "var(--faint)", flex: "none", marginLeft: 8 }}>{n}</span></div>))}</div></div>
+          <div className="card" style={{ margin: 0 }}><b style={{ fontSize: 13 }}>Top 5 pages</b><span className="pill p-agency" style={{ marginLeft: 6 }}>{pgLive ? "live · Ahrefs" : "demo"}</span>
+            <div style={{ marginTop: 8, fontSize: 12 }}>{pgRows.length === 0 ? <div style={{ color: "var(--faint)" }}>No page data.</div> : pgRows.map(([q, n], i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderTop: "0.5px solid var(--line)" }}><span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{q}</span><span style={{ color: "var(--faint)", flex: "none", marginLeft: 8 }}>{n}</span></div>))}</div></div>
+        </div>);
+      })()}
 
       <div className="card" style={{ marginTop: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}><b>Competitors</b></div>
@@ -196,10 +220,10 @@ export default function ClientServiceDashboard() {
           ))}
         </div>
         <form onSubmit={addComp} style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <input className="input" style={{ flex: 1 }} value={newComp} onChange={(e) => setNewComp(e.target.value)} placeholder="Add a competitor (e.g. Sportpesa)" />
+          <input className="input" style={{ flex: 1 }} value={newComp} onChange={(e) => setNewComp(e.target.value)} placeholder="Add a competitor domain (e.g. sportpesa.com)" />
           <button className="btn btn-ghost">Add</button>
         </form>
-        <button className="btn btn-primary" style={{ width: "100%" }} onClick={() => setShowCompare(true)} disabled={comps.length === 0}>Compare organic traffic, top-10 keywords &amp; backlinks</button>
+        <button className="btn btn-primary" style={{ width: "100%" }} onClick={openCompare} disabled={comps.length === 0}>Compare organic traffic, keywords &amp; backlinks</button>
       </div>
 
       <div className="empty" style={{ marginTop: 14 }}>The live {svc?.label || "service"} numbers, LLM visibility and the comparison connect to real Ahrefs / GSC data in a later step. This frame is on demo data; the competitors list above is real.</div>
@@ -283,18 +307,23 @@ export default function ClientServiceDashboard() {
 
       {showCompare && (
         <Modal title="You vs competitors" onClose={() => setShowCompare(false)}>
-          <div className="empty" style={{ marginBottom: 10 }}>Organic traffic, top-10 keywords, backlinks. <span className="pill p-agency">demo — real Ahrefs data later</span></div>
+          <div className="empty" style={{ marginBottom: 10 }}>Organic traffic, organic keywords, backlinks. <span className="pill p-agency">live · Ahrefs</span></div>
           <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 6, fontSize: 12, color: "var(--faint)", paddingBottom: 6, borderBottom: "0.5px solid var(--line)" }}>
-            <span></span><span style={{ textAlign: "right" }}>Traffic</span><span style={{ textAlign: "right" }}>Top-10 kws</span><span style={{ textAlign: "right" }}>Backlinks</span>
+            <span></span><span style={{ textAlign: "right" }}>Traffic</span><span style={{ textAlign: "right" }}>Keywords</span><span style={{ textAlign: "right" }}>Backlinks</span>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 6, alignItems: "center", padding: "9px 0", borderBottom: "0.5px solid var(--line)", background: "#FCF7E6", borderRadius: 6 }}>
-            <b style={{ paddingLeft: 6 }}>{ws?.name} (you)</b><span style={{ textAlign: "right", fontWeight: 600 }}>{DEMO_COMPARE.traffic}</span><span style={{ textAlign: "right", fontWeight: 600 }}>{DEMO_COMPARE.kw}</span><span style={{ textAlign: "right", fontWeight: 600, paddingRight: 6 }}>{DEMO_COMPARE.bl}</span>
-          </div>
-          {comps.map((c, i) => (
-            <div key={c.id} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 6, alignItems: "center", padding: "9px 6px", borderBottom: "0.5px solid var(--line)", fontSize: 13 }}>
-              <span>{c.name}</span><span style={{ textAlign: "right" }}>{["201k","96k","175k","150k"][i % 4]}</span><span style={{ textAlign: "right" }}>{["1,880","910","1,540","1,200"][i % 4]}</span><span style={{ textAlign: "right" }}>{["112k","41k","98k","70k"][i % 4]}</span>
-            </div>
-          ))}
+          {compareBusy && <div style={{ fontSize: 13, color: "var(--faint)", padding: "10px 0" }}>Pulling live Ahrefs data…</div>}
+          {!compareBusy && (compareData || []).map((row, i) => {
+            const fmt = (n) => (n == null ? "—" : n >= 1000000 ? (n / 1000000).toFixed(1) + "m" : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n));
+            return (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 6, alignItems: "center", padding: "9px 6px", borderBottom: "0.5px solid var(--line)", fontSize: 13, background: row.you ? "#FCF7E6" : "transparent", borderRadius: row.you ? 6 : 0 }}>
+                <b style={{ paddingLeft: 6, fontWeight: row.you ? 600 : 400 }}>{row.name}</b>
+                <span style={{ textAlign: "right", fontWeight: row.you ? 600 : 400 }}>{fmt(row.org_traffic)}</span>
+                <span style={{ textAlign: "right", fontWeight: row.you ? 600 : 400 }}>{fmt(row.org_keywords)}</span>
+                <span style={{ textAlign: "right", fontWeight: row.you ? 600 : 400, paddingRight: 6 }}>{fmt(row.backlinks)}</span>
+              </div>
+            );
+          })}
+          {!compareBusy && (compareData || []).some((r) => !r.you && r.org_traffic == null) && <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 8 }}>A "—" means that competitor was added as a name, not a domain. Edit it to a domain (e.g. sportpesa.com) for live data.</div>}
         </Modal>
       )}
     </Shell>
