@@ -48,6 +48,7 @@ export default function ClientServiceDashboard() {
   const [newComp, setNewComp] = useState("");
   const [showCompare, setShowCompare] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
+  const [isClient, setIsClient] = useState(false);
   const [uid, setUid] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
@@ -77,9 +78,11 @@ export default function ClientServiceDashboard() {
       if (!session) { router.replace("/login"); return; }
       const uid = session.user.id;
       const { data: prof } = await supabase.from("profiles").select("full_name,email,side,is_super_admin").eq("id", uid).single();
-      if (prof?.side !== "agency") { router.replace("/dashboard"); return; }
+      if (!prof) { router.replace("/login"); return; }
+      const client = prof.side === "client";
+      setIsClient(client);
       setProfile(prof);
-      setDepts(await loadAgencyDepts(uid, !!prof?.is_super_admin));
+      if (!client) setDepts(await loadAgencyDepts(uid, !!prof?.is_super_admin));
       // read the client record directly (RLS grants super admin, project lead, or assigned member)
       const { data: w } = await supabase.from("workspaces").select("id,name,industry,website,start_date,project_lead_id").eq("id", id).single();
       if (!w) { router.replace("/dashboard"); return; }
@@ -91,7 +94,7 @@ export default function ClientServiceDashboard() {
         fetch(`/api/ahrefs?kind=keywords&target=${enc}`, { headers: H }).then((r) => r.json()).then((j) => setKw(j)).catch(() => {});
         fetch(`/api/ahrefs?kind=pages&target=${enc}`, { headers: H }).then((r) => r.json()).then((j) => setTopPages(j)).catch(() => {});
       }
-      setCanEdit(!!prof.is_super_admin || w.project_lead_id === uid || true); // agency members on the client may edit; RLS enforces
+      setCanEdit(!client); // clients cannot edit; agency members can (RLS enforces)
       const { data: asg } = await supabase.from("service_assignments").select("profile_id").eq("workspace_id", id).eq("service_key", key);
       const ids = [...new Set((asg || []).map((a) => a.profile_id))];
       const { data: profs } = ids.length ? await supabase.from("profiles").select("id,full_name,email").in("id", ids) : { data: [] };
@@ -147,15 +150,17 @@ export default function ClientServiceDashboard() {
 
   if (loading) return <div className="center">Loading…</div>;
 
+  const clientNav = (<><div className="grp">Menu</div><nav className="nav"><a onClick={() => router.push("/dashboard")} style={{ cursor: "pointer" }}>← Back to dashboard</a></nav></>);
   return (
-    <Shell profile={profile} roleLabel={profile?.is_super_admin ? "Super admin" : "Team member"} nav={<AgencyNav profile={profile} active={"svc:" + key} depts={depts} />}>
-      <a style={{ fontSize: 12, color: "var(--muted)", cursor: "pointer" }} onClick={() => router.push(`/client/${id}`)}>← {ws?.name || "Client"}</a>
+    <Shell profile={profile} roleLabel={isClient ? "Client" : (profile?.is_super_admin ? "Super admin" : "Team member")} nav={isClient ? clientNav : <AgencyNav profile={profile} active={"svc:" + key} depts={depts} />}>
+      <a style={{ fontSize: 12, color: "var(--muted)", cursor: "pointer" }} onClick={() => router.push(isClient ? "/dashboard" : `/client/${id}`)}>← {isClient ? "Back to dashboard" : (ws?.name || "Client")}</a>
       <div className="page-head" style={{ marginTop: 8 }}>
         <h1 style={{ fontSize: 24, display: "flex", alignItems: "center", gap: 10 }}>{ws?.name} <span className="pill" style={{ background: "#E7F0FF", color: "#2557C7" }}>{svc?.label || key}</span></h1>
-        <span className="pill p-agency">Oversight</span>
+        {!isClient && <span className="pill p-agency">Oversight</span>}
       </div>
-      <div className="empty" style={{ marginBottom: 14 }}>You're seeing exactly what the {svc?.label || "service"} team sees for this client. Internal, the client sees only the reports.</div>
+      {!isClient && <div className="empty" style={{ marginBottom: 14 }}>You're seeing exactly what the {svc?.label || "service"} team sees for this client. Internal, the client sees only the reports.</div>}
 
+      {!isClient && (
       <div className="card">
         <div style={{ fontSize: 11, color: "var(--faint)", marginBottom: 8 }}>{svc?.label} team on this client — click to see their current work</div>
         {members.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>No one assigned to this service yet.</div>
@@ -165,6 +170,7 @@ export default function ClientServiceDashboard() {
               ))}
             </div>}
       </div>
+      )}
 
       <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600, margin: "16px 0 8px" }}>{isSeo ? "Search performance" : (svc?.label + " performance")} <span className="pill p-agency" style={{ marginLeft: 4 }}>demo · GSC</span></div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
@@ -232,8 +238,8 @@ export default function ClientServiceDashboard() {
         <b>{svc?.label} tasks for {ws?.name}</b>
         <div style={{ fontSize: 12, color: "var(--faint)", margin: "2px 0 10px" }}>The team's action plan for this client. Move items To do → In progress → Delivered.</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add task</button>
-          <button className="btn btn-ghost" onClick={() => setShowAssign(true)}>Assign task</button>
+          {!isClient && <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add task</button>}
+          <button className="btn btn-primary" onClick={() => setShowAssign(true)}>Assign task</button>
         </div>
 
         <div style={{ display: "flex", gap: 4, background: "var(--cloud,#F5F6F8)", padding: 4, borderRadius: 10, width: "fit-content", marginBottom: 10, flexWrap: "wrap" }}>
