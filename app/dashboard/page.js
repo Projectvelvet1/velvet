@@ -46,8 +46,9 @@ export default function Dashboard() {
   const [myTab, setMyTab] = useState("this_week");
   const [showAdd, setShowAdd] = useState(false);
   const [cardFilter, setCardFilter] = useState(null);
-  const [askQ, setAskQ] = useState("");
-  const [askAnswer, setAskAnswer] = useState("");
+  const [askInput, setAskInput] = useState("");
+  const [askThread, setAskThread] = useState([]);
+  const [askContext, setAskContext] = useState("");
   const [askBusy, setAskBusy] = useState(false);
   const [askErr, setAskErr] = useState("");
 
@@ -171,13 +172,23 @@ export default function Dashboard() {
   const firstName = (profile?.full_name || profile?.email || "there").split(" ")[0].split("@")[0];
 
   if (myMode) {
+    const today = ymd(new Date());
     const [qa, qb] = rangeBounds("this_quarter");
     const inQ = (d) => { if (!d) return false; const x = ymd(new Date(d)); return x >= qa && x <= qb; };
+    const openT = myTasks.filter((t) => ["todo", "in_progress", "needs_look"].includes(t.status));
     const cIn = myTasks.filter((t) => t.status === "in_progress").length;
     const cAwait = myTasks.filter((t) => t.status === "delivered").length;
     const cBack = myTasks.filter((t) => t.status === "needs_look").length;
     const cDone = myTasks.filter((t) => (t.status === "delivered" || t.status === "reviewed") && inQ(t.updated_at)).length;
-    const cUnassigned = myTasks.filter((t) => ["todo", "in_progress", "needs_look"].includes(t.status) && (!t.due_date || !t.workspace_id)).length;
+    const [wa, wb] = rangeBounds("this_week");
+    const cDueWeek = openT.filter((t) => t.due_date && t.due_date >= wa && t.due_date <= wb).length;
+    const cOverdue = openT.filter((t) => t.due_date && t.due_date < today).length;
+    const cUnassigned = openT.filter((t) => !t.due_date || !t.workspace_id).length;
+
+    const [ra, rb] = rangeBounds(myTab);
+    const queue = openT.filter((t) => t.due_date && t.due_date >= ra && t.due_date <= rb)
+      .sort((x, y) => (PRIO_W[y.priority] || 1) - (PRIO_W[x.priority] || 1) || (x.due_date || "").localeCompare(y.due_date || ""));
+    const TABS = [["today", "Today"], ["this_week", "This week"], ["this_month", "This month"], ["this_quarter", "This quarter"]];
 
     const svcKey = myClients[0]?.serviceKey;
     const dept = DEPARTMENTS.find((d) => d.services.some((x) => x.key === svcKey));
@@ -196,26 +207,32 @@ export default function Dashboard() {
       awaiting: { label: "Awaiting client", fn: (t) => t.status === "delivered" },
       back: { label: "Back to me", fn: (t) => t.status === "needs_look" },
       done: { label: "Done this quarter", fn: (t) => (t.status === "delivered" || t.status === "reviewed") && inQ(t.updated_at) },
-      unassigned: { label: "Unassigned (no due date or no client)", fn: (t) => ["todo", "in_progress", "needs_look"].includes(t.status) && (!t.due_date || !t.workspace_id) },
+      open: { label: "Open tasks", fn: (t) => ["todo", "in_progress", "needs_look"].includes(t.status) },
+      dueWeek: { label: "Due this week", fn: (t) => ["todo","in_progress","needs_look"].includes(t.status) && t.due_date && t.due_date >= wa && t.due_date <= wb },
+      overdue: { label: "Overdue", fn: (t) => ["todo","in_progress","needs_look"].includes(t.status) && t.due_date && t.due_date < today },
+      unassigned: { label: "Unassigned (no due date or no client)", fn: (t) => ["todo","in_progress","needs_look"].includes(t.status) && (!t.due_date || !t.workspace_id) },
     };
     const filtered = cardFilter && FILTERS[cardFilter] ? myTasks.filter(FILTERS[cardFilter].fn) : [];
     const card = (label, n, fkey, numColor) => (
       <div className="card" style={{ margin: 0, cursor: "pointer", outline: cardFilter === fkey ? "2px solid var(--gold,#F7C948)" : "none" }} onClick={() => setCardFilter(cardFilter === fkey ? null : fkey)}>
         <div style={{ fontSize: 12, color: "var(--faint)" }}>{label}</div>
-        <div style={{ fontSize: 28, fontWeight: 700, color: numColor || "var(--text)" }}>{n}</div>
+        <div style={{ fontSize: 26, fontWeight: 700, color: numColor || "var(--text)" }}>{n}</div>
       </div>
     );
     const askVelvet = async (q) => {
-      const question = (q ?? askQ).trim(); if (!question) return;
-      setAskQ(question); setAskBusy(true); setAskErr(""); setAskAnswer("");
+      const text = (q ?? askInput).trim(); if (!text || askBusy) return;
+      const thread = [...askThread, { role: "user", content: text }];
+      setAskThread(thread); setAskInput(""); setAskBusy(true); setAskErr("");
       try {
         const { data: sess } = await supabase.auth.getSession();
-        const res = await fetch("/api/ask-velvet", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${sess.session?.access_token}` }, body: JSON.stringify({ question }) });
+        const res = await fetch("/api/ask-velvet", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${sess.session?.access_token}` }, body: JSON.stringify({ messages: thread, context: askContext || undefined }) });
         const j = await res.json(); setAskBusy(false);
         if (!res.ok) { setAskErr(j.error || "Ask Velvet couldn't answer."); return; }
-        setAskAnswer(j.answer || "No answer.");
+        setAskThread([...thread, { role: "assistant", content: j.answer || "No answer." }]);
+        if (j.context) setAskContext(j.context);
       } catch (e) { setAskBusy(false); setAskErr("Ask Velvet error: " + (e?.message || String(e))); }
     };
+    const askReset = () => { setAskThread([]); setAskContext(""); setAskErr(""); setAskInput(""); };
 
     return (
       <Shell profile={profile} roleLabel={roleLabel} nav={nav}>
@@ -225,31 +242,54 @@ export default function Dashboard() {
           <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ New item</button>
         </div>
 
-        {/* Ask Velvet (agency only) */}
+        {/* Ask Velvet, docked at the top */}
         <div style={{ background: "#0B0D12", borderRadius: 14, padding: 16, marginBottom: 14, color: "#fff" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <b style={{ fontSize: 15 }}>✨ Ask Velvet</b>
-            <span style={{ fontSize: 11, color: "#9AA3B2", border: "0.5px solid #2A3550", borderRadius: 20, padding: "2px 10px" }}>agency only</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {askThread.length > 0 && <span onClick={askReset} style={{ fontSize: 12, color: "#9AA3B2", cursor: "pointer" }}>New chat</span>}
+              <span style={{ fontSize: 11, color: "#9AA3B2", border: "0.5px solid #2A3550", borderRadius: 20, padding: "2px 10px" }}>agency only</span>
+            </span>
           </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-            <button onClick={() => askVelvet(`How is ${topClient} doing vs competitors?`)} disabled={askBusy} style={{ background: "var(--gold,#F7C948)", color: "#0B0D12", border: "none", borderRadius: 20, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>How is {topClient} doing vs competitors?</button>
-            <button onClick={() => askVelvet("Summarise this week's SEO wins")} disabled={askBusy} style={{ background: "transparent", color: "#E7EAF0", border: "0.5px solid #2A3550", borderRadius: 20, padding: "7px 14px", fontSize: 13, cursor: "pointer" }}>Summarise this week's SEO wins</button>
-          </div>
+
+          {askThread.length === 0 && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+              <button onClick={() => askVelvet(`How is ${topClient} doing vs competitors?`)} disabled={askBusy} style={{ background: "var(--gold,#F7C948)", color: "#0B0D12", border: "none", borderRadius: 20, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>How is {topClient} doing vs competitors?</button>
+              <button onClick={() => askVelvet("Summarise this week's SEO wins")} disabled={askBusy} style={{ background: "transparent", color: "#E7EAF0", border: "0.5px solid #2A3550", borderRadius: 20, padding: "7px 14px", fontSize: 13, cursor: "pointer" }}>Summarise this week's SEO wins</button>
+            </div>
+          )}
+
+          {askThread.length > 0 && (
+            <div style={{ maxHeight: 340, overflowY: "auto", marginBottom: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+              {askThread.map((m, i) => (
+                <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%", background: m.role === "user" ? "var(--gold,#F7C948)" : "#15181F", color: m.role === "user" ? "#0B0D12" : "#E7EAF0", border: m.role === "user" ? "none" : "0.5px solid #2A3550", borderRadius: 12, padding: "9px 13px", fontSize: 13.5, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{m.content}</div>
+              ))}
+              {askBusy && <div style={{ alignSelf: "flex-start", color: "#9AA3B2", fontSize: 12, padding: "4px 2px" }}>Ask Velvet is reading the latest data…</div>}
+            </div>
+          )}
+          {askThread.length === 0 && askBusy && <div style={{ fontSize: 12, color: "#9AA3B2", marginBottom: 10 }}>Ask Velvet is reading the latest data…</div>}
+
           <div style={{ display: "flex", gap: 8 }}>
-            <input value={askQ} onChange={(e) => setAskQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") askVelvet(); }} placeholder="Ask about any client's performance…" style={{ flex: 1, background: "#15181F", border: "0.5px solid #2A3550", borderRadius: 10, padding: "11px 14px", color: "#fff", fontSize: 14 }} />
+            <input value={askInput} onChange={(e) => setAskInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") askVelvet(); }} placeholder={askThread.length ? "Reply…" : "Ask about any client's performance…"} style={{ flex: 1, background: "#15181F", border: "0.5px solid #2A3550", borderRadius: 10, padding: "11px 14px", color: "#fff", fontSize: 14 }} />
             <button onClick={() => askVelvet()} disabled={askBusy} style={{ background: "var(--gold,#F7C948)", color: "#0B0D12", border: "none", borderRadius: 10, padding: "0 16px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{askBusy ? "…" : "Ask"}</button>
           </div>
-          {askBusy && <div style={{ fontSize: 12, color: "#9AA3B2", marginTop: 10 }}>Ask Velvet is reading the latest data…</div>}
           {askErr && <div style={{ fontSize: 12, color: "#F2B4A3", marginTop: 10 }}>{askErr}</div>}
-          {askAnswer && <div style={{ fontSize: 13.5, color: "#E7EAF0", marginTop: 12, lineHeight: 1.5, whiteSpace: "pre-wrap", background: "#15181F", border: "0.5px solid #2A3550", borderRadius: 10, padding: "12px 14px" }}>{askAnswer}</div>}
         </div>
 
-        {/* status cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
+        {/* status view */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 12 }}>
           {card("In progress", cIn, "in_progress")}
           {card("Awaiting client", cAwait, "awaiting")}
           {card("Back to me", cBack, "back", cBack ? "#B4640C" : null)}
           {card("Done this quarter", cDone, "done", "#177E4E")}
+        </div>
+
+        {/* due-date view */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 12 }}>
+          {card("Open tasks", openT.length, "open")}
+          {card("Due this week", cDueWeek, "dueWeek", cDueWeek ? "#9A6B00" : null)}
+          {card("Overdue", cOverdue, "overdue", cOverdue ? "#C0392B" : null)}
+          {card("Unassigned tasks", cUnassigned, "unassigned", cUnassigned ? "#7C3AED" : null)}
         </div>
 
         {cardFilter && (
@@ -271,6 +311,22 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* date tabs + priority queue */}
+        <div style={{ display: "flex", gap: 4, background: "var(--cloud,#F5F6F8)", padding: 4, borderRadius: 10, width: "fit-content", marginBottom: 10 }}>
+          {TABS.map(([v, l]) => (<button key={v} onClick={() => setMyTab(v)} className="btn" style={{ padding: "6px 12px", fontSize: 13, background: myTab === v ? "#fff" : "transparent", boxShadow: myTab === v ? "0 1px 2px rgba(0,0,0,.06)" : "none", color: myTab === v ? "var(--text)" : "var(--muted)" }}>{l}</button>))}
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>Priority queue <span style={{ fontSize: 12, color: "var(--faint)", fontWeight: 400 }}>· {queue.length} task(s), highest priority first</span></div>
+        {queue.length === 0 ? <div className="empty" style={{ marginTop: 8 }}>Nothing due in this range. Switch the range above, or give a task a due date.</div>
+          : <div className="card">{queue.map((t) => { const pm = PRIO_META[t.priority] || PRIO_META.medium; const pill = PILL[t.status] || PILL.todo; const overdue = t.due_date && t.due_date < today; return (
+              <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 0", borderTop: "0.5px solid var(--line)" }}>
+                <div style={{ minWidth: 0 }}><div style={{ fontSize: 13 }}>{t.title}</div>
+                  <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 1 }}>{t.workspace_id ? t.client + " · " : "Personal · "}{SVC_LABEL[t.service_key] || t.service_key}{t.due_date ? " · due " + t.due_date : ""}</div></div>
+                <div style={{ display: "flex", gap: 6, alignItems: "center", flex: "none" }}>
+                  <span className="pill" style={{ background: pm.bg, color: pm.fg }}>{pm.l}</span>
+                  <span className="pill" style={{ background: overdue ? "#FBEAE6" : pill.bg, color: overdue ? "#C0392B" : pill.fg }}>{overdue ? "Overdue" : pill.l}</span>
+                  {t.workspace_id && <button className="btn btn-ghost" onClick={() => router.push(`/client/${t.workspace_id}/service/${t.service_key}`)}>Open</button>}
+                </div></div>); })}</div>}
+
         {/* What needs attention */}
         <div className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}><b>What needs attention</b><span className="pill p-agency">demo signals</span></div>
@@ -283,10 +339,7 @@ export default function Dashboard() {
 
         {/* My work */}
         <div className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <b>My work</b>
-            {cUnassigned > 0 && <span style={{ cursor: "pointer", color: "var(--faint)", fontSize: 12 }} onClick={() => setCardFilter("unassigned")}>· {cUnassigned} unassigned</span>}
-          </div>
+          <b>My work</b>
           {myTasks.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)", marginTop: 8 }}>No tasks assigned to you yet.</div>
             : myTasks.map((t) => { const pill = PILL[t.status] || PILL.todo; return (
               <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "12px 0", borderTop: "0.5px solid var(--line)", cursor: t.workspace_id ? "pointer" : "default" }} onClick={() => t.workspace_id && router.push(`/client/${t.workspace_id}/service/${t.service_key}`)}>

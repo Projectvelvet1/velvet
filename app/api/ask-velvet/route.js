@@ -40,8 +40,12 @@ export async function POST(req) {
   const ahrefsKey = process.env.AHREFS_API_KEY;
 
   let body; try { body = await req.json(); } catch { return Response.json({ error: "Bad request" }, { status: 400 }); }
-  const question = (body?.question || "").trim();
-  if (!question) return Response.json({ error: "Ask a question first." }, { status: 400 });
+  let msgs = Array.isArray(body?.messages) ? body.messages : (body?.question ? [{ role: "user", content: body.question }] : []);
+  msgs = msgs.filter((m) => m && (m.role === "user" || m.role === "assistant") && String(m.content || "").trim())
+    .map((m) => ({ role: m.role, content: String(m.content).trim() })).slice(-16);
+  if (!msgs.length || msgs[msgs.length - 1].role !== "user") return Response.json({ error: "Ask a question first." }, { status: 400 });
+  const providedContext = typeof body?.context === "string" && body.context.trim() ? body.context.trim() : null;
+  const allUserText = msgs.filter((m) => m.role === "user").map((m) => m.content).join(" ").toLowerCase();
 
   // the caller's clients
   const { data: asg } = await db.from("service_assignments").select("workspace_id").eq("profile_id", user.id);
@@ -53,11 +57,11 @@ export async function POST(req) {
   wsIds = wsIds.slice(0, 6);
   const { data: wss } = wsIds.length ? await db.from("workspaces").select("id,name,website").in("id", wsIds) : { data: [] };
 
-  const named = (wss || []).find((w) => w.name && question.toLowerCase().includes(w.name.toLowerCase()));
+  const named = (providedContext ? null : (wss || []).find((w) => w.name && allUserText.includes(w.name.toLowerCase())));
   const focus = named ? [named] : (wss || []).slice(0, 4);
 
   const ah = [];
-  if (ahrefsKey) {
+  if (!providedContext && ahrefsKey) {
     for (const w of focus) { if (w.website) ah.push({ name: w.name, ...(await ahrefsOverview(ahrefsKey, domainOf(w.website))) }); }
     if (named) {
       const { data: comps } = await db.from("competitors").select("name").eq("workspace_id", named.id).limit(4);
@@ -65,11 +69,11 @@ export async function POST(req) {
     }
   }
 
-  const { data: tasks } = await db.from("tasks").select("title,status,workspace_id,updated_at,due_date").eq("assignee_id", user.id).limit(60);
+  const { data: tasks } = providedContext ? { data: [] } : await db.from("tasks").select("title,status,workspace_id,updated_at,due_date").eq("assignee_id", user.id).limit(60);
   const nameOf = (id) => { const w = (wss || []).find((x) => x.id === id); return w ? w.name : "(no client)"; };
   const taskLines = (tasks || []).map((t) => `- ${t.title} [${t.status}] client:${nameOf(t.workspace_id)}${t.due_date ? " due:" + t.due_date : ""}${t.updated_at ? " updated:" + String(t.updated_at).slice(0, 10) : ""}`);
 
-  const ctx = [
+  const ctx = providedContext || [
     "AHREFS DATA (current):",
     ...(ah.length ? ah.map((a) => a.error ? `- ${a.name}: (no data available)` : `- ${a.name}: organic traffic ${a.org_traffic}, organic keywords ${a.org_keywords}, Domain Rating ${a.domain_rating}, backlinks ${a.backlinks}`) : ["- (no Ahrefs data available)"]),
     "",
@@ -77,7 +81,7 @@ export async function POST(req) {
     ...(taskLines.length ? taskLines : ["- (no tasks)"]),
   ].join("\n");
 
-  const SYS = `You are Ask Velvet, the assistant for a marketing agency's team. Answer the team member's question about their clients in plain, concise language (a few sentences, use a short list only if helpful). Use ONLY the data below. If a specific number or fact is not present, say you don't have that data rather than guessing. Never invent metrics, dates, or trends. Today is ${new Date().toISOString().slice(0, 10)}.
+  const SYS = `You are Ask Velvet, the assistant for a marketing agency's team, in an ongoing chat with a team member about their clients. Be conversational, warm and concise. Answer using ONLY the data below and the conversation so far. If a specific number or fact is not present, say you don't have that data rather than guessing, and offer what you can. If a request is ambiguous, ask a short clarifying question. Never invent metrics, dates, or trends. Today is ${new Date().toISOString().slice(0, 10)}.
 
 DATA:
 ${ctx}`;
@@ -86,12 +90,12 @@ ${ctx}`;
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": anthropicKey, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: "claude-sonnet-5", max_tokens: 900, system: SYS, messages: [{ role: "user", content: question }] }),
+      body: JSON.stringify({ model: "claude-sonnet-5", max_tokens: 900, system: SYS, messages: msgs }),
     });
     if (!r.ok) { const t = await r.text(); return Response.json({ error: "AI request failed", detail: t.slice(0, 200) }, { status: 502 }); }
     const data = await r.json();
     const answer = (data?.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
-    return Response.json({ ok: true, answer, used: { clients: focus.map((f) => f.name), ahrefs: ah.length, tasks: (tasks || []).length } });
+    return Response.json({ ok: true, answer, context: ctx, used: { clients: focus.map((f) => f.name), ahrefs: ah.length, tasks: (tasks || []).length } });
   } catch (e) {
     return Response.json({ error: "AI error: " + (e?.message || String(e)) }, { status: 502 });
   }
