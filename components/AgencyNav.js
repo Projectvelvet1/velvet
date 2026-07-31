@@ -17,8 +17,7 @@ export default function AgencyNav({ profile, active, depts = [] }) {
       <nav className="nav">
         {item("dashboard", "Dashboard", "/dashboard")}
         {item("clients", "Clients", "/clients")}
-        {profile?.is_super_admin && item("prospects", "Prospects", "/prospects")}
-        {item("invite", "Invite teammate", "/invite")}
+        {profile?.is_super_admin && item("prospects", "Future Clients", "/prospects")}
       </nav>
 
       <div className="grp">Departments</div>
