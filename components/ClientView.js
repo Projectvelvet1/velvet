@@ -143,7 +143,7 @@ export default function ClientView({ workspace, services = [], profile, viewingA
     setShowDetails(false);
   }
 
-  function openFb() { setFbScores({}); setFbOverall(0); setFbAns({}); setFbDone(false); setShowFb(true); }
+  function openFb() { const init = {}; (services || []).forEach((s) => { init[s.service_key] = 5; }); setFbScores(init); setFbOverall(5); setFbAns({}); setFbDone(false); setShowFb(true); }
   async function sendFeedback(e) {
     e.preventDefault(); setFbBusy(true);
     const { data: { session } } = await supabase.auth.getSession();
@@ -412,21 +412,17 @@ export default function ClientView({ workspace, services = [], profile, viewingA
             </>
           ) : (
             <form onSubmit={sendFeedback}>
-              <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 0 }}>Rate each service from 1 (lowest) to 10 (highest).</p>
-              {services.map((s) => (
+              <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 0 }}>Drag each slider to rate from 1 (lowest) to 10 (highest).</p>
+              {services.map((s) => { const v = fbScores[s.service_key] ?? 5; return (
                 <div className="field" key={s.service_key}>
-                  <label>{s.service_label}</label>
-                  <select className="input" value={fbScores[s.service_key] || ""} onChange={(e) => setFbScores({ ...fbScores, [s.service_key]: Number(e.target.value) })} required>
-                    <option value="">Choose 1–10…</option>
-                    {[1,2,3,4,5,6,7,8,9,10].map((n) => <option key={n} value={n}>{n}</option>)}
-                  </select>
+                  <label style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}><span>{s.service_label}</span><span style={{ fontWeight: 700, color: "#0B0D12" }}>{v}<span style={{ fontSize: 11, color: "var(--faint)", fontWeight: 400 }}>/10</span></span></label>
+                  <input type="range" min={1} max={10} step={1} value={v} onChange={(e) => setFbScores({ ...fbScores, [s.service_key]: Number(e.target.value) })} style={{ width: "100%", accentColor: "var(--gold,#F7C948)" }} />
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--faint)" }}><span>1</span><span>10</span></div>
                 </div>
-              ))}
-              <div className="field"><label>Overall rating</label>
-                <select className="input" value={fbOverall || ""} onChange={(e) => setFbOverall(Number(e.target.value))} required>
-                  <option value="">Choose 1–10…</option>
-                  {[1,2,3,4,5,6,7,8,9,10].map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
+              ); })}
+              <div className="field"><label style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}><span>Overall rating</span><span style={{ fontWeight: 700, color: "#0B0D12" }}>{fbOverall || 5}<span style={{ fontSize: 11, color: "var(--faint)", fontWeight: 400 }}>/10</span></span></label>
+                <input type="range" min={1} max={10} step={1} value={fbOverall || 5} onChange={(e) => setFbOverall(Number(e.target.value))} style={{ width: "100%", accentColor: "var(--gold,#F7C948)" }} />
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--faint)" }}><span>1</span><span>10</span></div>
               </div>
               {fbQs.map((q) => (
                 <div className="field" key={q.question_key}><label>{q.label}</label>
