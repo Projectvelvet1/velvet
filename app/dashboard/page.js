@@ -46,7 +46,10 @@ export default function Dashboard() {
   const [myTab, setMyTab] = useState("this_week");
   const [showAdd, setShowAdd] = useState(false);
   const [cardFilter, setCardFilter] = useState(null);
-  const [askMsg, setAskMsg] = useState("");
+  const [askQ, setAskQ] = useState("");
+  const [askAnswer, setAskAnswer] = useState("");
+  const [askBusy, setAskBusy] = useState(false);
+  const [askErr, setAskErr] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -202,7 +205,17 @@ export default function Dashboard() {
         <div style={{ fontSize: 28, fontWeight: 700, color: numColor || "var(--text)" }}>{n}</div>
       </div>
     );
-    const askSoon = () => setAskMsg("Ask Velvet is coming in a later build.");
+    const askVelvet = async (q) => {
+      const question = (q ?? askQ).trim(); if (!question) return;
+      setAskQ(question); setAskBusy(true); setAskErr(""); setAskAnswer("");
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        const res = await fetch("/api/ask-velvet", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${sess.session?.access_token}` }, body: JSON.stringify({ question }) });
+        const j = await res.json(); setAskBusy(false);
+        if (!res.ok) { setAskErr(j.error || "Ask Velvet couldn't answer."); return; }
+        setAskAnswer(j.answer || "No answer.");
+      } catch (e) { setAskBusy(false); setAskErr("Ask Velvet error: " + (e?.message || String(e))); }
+    };
 
     return (
       <Shell profile={profile} roleLabel={roleLabel} nav={nav}>
@@ -219,11 +232,16 @@ export default function Dashboard() {
             <span style={{ fontSize: 11, color: "#9AA3B2", border: "0.5px solid #2A3550", borderRadius: 20, padding: "2px 10px" }}>agency only</span>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-            <button onClick={askSoon} style={{ background: "var(--gold,#F7C948)", color: "#0B0D12", border: "none", borderRadius: 20, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>How is {topClient} doing vs competitors?</button>
-            <button onClick={askSoon} style={{ background: "transparent", color: "#E7EAF0", border: "0.5px solid #2A3550", borderRadius: 20, padding: "7px 14px", fontSize: 13, cursor: "pointer" }}>Summarise this week's SEO wins</button>
+            <button onClick={() => askVelvet(`How is ${topClient} doing vs competitors?`)} disabled={askBusy} style={{ background: "var(--gold,#F7C948)", color: "#0B0D12", border: "none", borderRadius: 20, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>How is {topClient} doing vs competitors?</button>
+            <button onClick={() => askVelvet("Summarise this week's SEO wins")} disabled={askBusy} style={{ background: "transparent", color: "#E7EAF0", border: "0.5px solid #2A3550", borderRadius: 20, padding: "7px 14px", fontSize: 13, cursor: "pointer" }}>Summarise this week's SEO wins</button>
           </div>
-          <input onFocus={askSoon} readOnly placeholder="Ask about any client's performance…" style={{ width: "100%", background: "#15181F", border: "0.5px solid #2A3550", borderRadius: 10, padding: "11px 14px", color: "#fff", fontSize: 14 }} />
-          {askMsg && <div style={{ fontSize: 12, color: "#9AA3B2", marginTop: 8 }}>{askMsg}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <input value={askQ} onChange={(e) => setAskQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") askVelvet(); }} placeholder="Ask about any client's performance…" style={{ flex: 1, background: "#15181F", border: "0.5px solid #2A3550", borderRadius: 10, padding: "11px 14px", color: "#fff", fontSize: 14 }} />
+            <button onClick={() => askVelvet()} disabled={askBusy} style={{ background: "var(--gold,#F7C948)", color: "#0B0D12", border: "none", borderRadius: 10, padding: "0 16px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{askBusy ? "…" : "Ask"}</button>
+          </div>
+          {askBusy && <div style={{ fontSize: 12, color: "#9AA3B2", marginTop: 10 }}>Ask Velvet is reading the latest data…</div>}
+          {askErr && <div style={{ fontSize: 12, color: "#F2B4A3", marginTop: 10 }}>{askErr}</div>}
+          {askAnswer && <div style={{ fontSize: 13.5, color: "#E7EAF0", marginTop: 12, lineHeight: 1.5, whiteSpace: "pre-wrap", background: "#15181F", border: "0.5px solid #2A3550", borderRadius: 10, padding: "12px 14px" }}>{askAnswer}</div>}
         </div>
 
         {/* status cards */}
