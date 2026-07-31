@@ -46,6 +46,7 @@ export default function Dashboard() {
   const [myTab, setMyTab] = useState("this_week");
   const [showAdd, setShowAdd] = useState(false);
   const [cardFilter, setCardFilter] = useState(null);
+  const [askMsg, setAskMsg] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -167,58 +168,72 @@ export default function Dashboard() {
   const firstName = (profile?.full_name || profile?.email || "there").split(" ")[0].split("@")[0];
 
   if (myMode) {
-    const today = ymd(new Date());
-    const open = myTasks.filter((t) => ["todo", "in_progress", "needs_look"].includes(t.status));
-    const counts = {
-      open: open.length,
-      dueWeek: open.filter((t) => { const [a, b] = rangeBounds("this_week"); return t.due_date && t.due_date >= a && t.due_date <= b; }).length,
-      overdue: open.filter((t) => t.due_date && t.due_date < today).length,
-      awaiting: myTasks.filter((t) => t.status === "delivered").length,
-    };
     const [qa, qb] = rangeBounds("this_quarter");
-    const inQuarter = (d) => { if (!d) return false; const x = ymd(new Date(d)); return x >= qa && x <= qb; };
-    const doneQuarter = myTasks.filter((t) => (t.status === "delivered" || t.status === "reviewed") && inQuarter(t.updated_at)).length;
-    const unassigned = open.filter((t) => !t.due_date || !t.workspace_id).length;
-    const [ra, rb] = rangeBounds(myTab);
-    const queue = open.filter((t) => t.due_date && t.due_date >= ra && t.due_date <= rb)
-      .sort((x, y) => (PRIO_W[y.priority] || 1) - (PRIO_W[x.priority] || 1) || (x.due_date || "").localeCompare(y.due_date || ""));
-    const TABS = [["today", "Today"], ["this_week", "This week"], ["this_month", "This month"], ["this_quarter", "This quarter"]];
-    const card = (label, n, color, fkey) => (<div className="card" style={{ margin: 0, cursor: fkey ? "pointer" : "default", outline: cardFilter === fkey ? "2px solid var(--gold, #F7C948)" : "none" }} onClick={fkey ? () => setCardFilter(cardFilter === fkey ? null : fkey) : undefined}><div style={{ fontSize: 11, color: "var(--faint)" }}>{label}</div><div style={{ fontSize: 26, fontWeight: 600, color: color || "var(--text)" }}>{n}</div></div>);
-    const thisMonth = (d) => { const x = new Date(d); const n = new Date(); return x.getFullYear() === n.getFullYear() && x.getMonth() === n.getMonth(); };
+    const inQ = (d) => { if (!d) return false; const x = ymd(new Date(d)); return x >= qa && x <= qb; };
+    const cIn = myTasks.filter((t) => t.status === "in_progress").length;
+    const cAwait = myTasks.filter((t) => t.status === "delivered").length;
+    const cBack = myTasks.filter((t) => t.status === "needs_look").length;
+    const cDone = myTasks.filter((t) => (t.status === "delivered" || t.status === "reviewed") && inQ(t.updated_at)).length;
+    const cUnassigned = myTasks.filter((t) => ["todo", "in_progress", "needs_look"].includes(t.status) && (!t.due_date || !t.workspace_id)).length;
+
+    const svcKey = myClients[0]?.serviceKey;
+    const dept = DEPARTMENTS.find((d) => d.services.some((x) => x.key === svcKey));
+    const svcLine = (dept?.label && svcKey) ? `${dept.label} · ${SVC_LABEL[svcKey] || svcKey}` : (myServiceLine || "Your workspace");
+    const topClient = myClients[0]?.name || "your client";
+
+    const PILL = {
+      todo: { l: "To do", bg: "#EEF0FF", fg: "#3B49C7" },
+      in_progress: { l: "In progress", bg: "#FCEFC3", fg: "#7A5B00" },
+      delivered: { l: "Awaiting client", bg: "#F0E9FB", fg: "#7C3AED" },
+      needs_look: { l: "Needs another look", bg: "#FDEBD3", fg: "#B4640C" },
+      reviewed: { l: "Reviewed", bg: "#E7F6EF", fg: "#177E4E" },
+    };
     const FILTERS = {
       in_progress: { label: "In progress", fn: (t) => t.status === "in_progress" },
       awaiting: { label: "Awaiting client", fn: (t) => t.status === "delivered" },
-      back: { label: "Back to you", fn: (t) => t.status === "needs_look" },
-      done: { label: "Done this quarter", fn: (t) => (t.status === "delivered" || t.status === "reviewed") && inQuarter(t.updated_at) },
-      open: { label: "Open tasks", fn: (t) => ["todo", "in_progress", "needs_look"].includes(t.status) },
-      dueWeek: { label: "Due this week", fn: (t) => { const [a, b] = rangeBounds("this_week"); return ["todo","in_progress","needs_look"].includes(t.status) && t.due_date && t.due_date >= a && t.due_date <= b; } },
-      overdue: { label: "Overdue", fn: (t) => ["todo","in_progress","needs_look"].includes(t.status) && t.due_date && t.due_date < today },
-      unassigned: { label: "Unassigned tasks (no due date or no client)", fn: (t) => ["todo","in_progress","needs_look"].includes(t.status) && (!t.due_date || !t.workspace_id) },
+      back: { label: "Back to me", fn: (t) => t.status === "needs_look" },
+      done: { label: "Done this quarter", fn: (t) => (t.status === "delivered" || t.status === "reviewed") && inQ(t.updated_at) },
+      unassigned: { label: "Unassigned (no due date or no client)", fn: (t) => ["todo", "in_progress", "needs_look"].includes(t.status) && (!t.due_date || !t.workspace_id) },
     };
     const filtered = cardFilter && FILTERS[cardFilter] ? myTasks.filter(FILTERS[cardFilter].fn) : [];
+    const card = (label, n, fkey, numColor) => (
+      <div className="card" style={{ margin: 0, cursor: "pointer", outline: cardFilter === fkey ? "2px solid var(--gold,#F7C948)" : "none" }} onClick={() => setCardFilter(cardFilter === fkey ? null : fkey)}>
+        <div style={{ fontSize: 12, color: "var(--faint)" }}>{label}</div>
+        <div style={{ fontSize: 28, fontWeight: 700, color: numColor || "var(--text)" }}>{n}</div>
+      </div>
+    );
+    const askSoon = () => setAskMsg("Ask Velvet is coming in a later build.");
+
     return (
       <Shell profile={profile} roleLabel={roleLabel} nav={nav}>
         <div className="page-head">
           <div><h1 style={{ fontSize: 24 }}>Welcome, {firstName}</h1>
-            <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 2 }}>{myServiceLine ? myServiceLine + " · your workspace" : "Your workspace"}</div></div>
-          <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add task</button>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 2 }}>{svcLine}</div></div>
+          <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ New item</button>
         </div>
 
-        {/* status view (existing) */}
+        {/* Ask Velvet (agency only) */}
+        <div style={{ background: "#0B0D12", borderRadius: 14, padding: 16, marginBottom: 14, color: "#fff" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <b style={{ fontSize: 15 }}>✨ Ask Velvet</b>
+            <span style={{ fontSize: 11, color: "#9AA3B2", border: "0.5px solid #2A3550", borderRadius: 20, padding: "2px 10px" }}>agency only</span>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+            <button onClick={askSoon} style={{ background: "var(--gold,#F7C948)", color: "#0B0D12", border: "none", borderRadius: 20, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>How is {topClient} doing vs competitors?</button>
+            <button onClick={askSoon} style={{ background: "transparent", color: "#E7EAF0", border: "0.5px solid #2A3550", borderRadius: 20, padding: "7px 14px", fontSize: 13, cursor: "pointer" }}>Summarise this week's SEO wins</button>
+          </div>
+          <input onFocus={askSoon} readOnly placeholder="Ask about any client's performance…" style={{ width: "100%", background: "#15181F", border: "0.5px solid #2A3550", borderRadius: 10, padding: "11px 14px", color: "#fff", fontSize: 14 }} />
+          {askMsg && <div style={{ fontSize: 12, color: "#9AA3B2", marginTop: 8 }}>{askMsg}</div>}
+        </div>
+
+        {/* status cards */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
-          {card("In progress", myCounts.in_progress, null, "in_progress")}
-          {card("Awaiting client", myCounts.delivered, null, "awaiting")}
-          {card("Back to you", myCounts.needs_look, myCounts.needs_look ? "#B4640C" : null, "back")}
-          {card("Done this quarter", doneQuarter, "#177E4E", "done")}
+          {card("In progress", cIn, "in_progress")}
+          {card("Awaiting client", cAwait, "awaiting")}
+          {card("Back to me", cBack, "back", cBack ? "#B4640C" : null)}
+          {card("Done this quarter", cDone, "done", "#177E4E")}
         </div>
 
-        {/* due-date view (new, below) */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 12 }}>
-          {card("Open tasks", counts.open, null, "open")}
-          {card("Due this week", counts.dueWeek, counts.dueWeek ? "#9A6B00" : null, "dueWeek")}
-          {card("Overdue", counts.overdue, counts.overdue ? "#C0392B" : null, "overdue")}
-          {card("Unassigned tasks", unassigned, unassigned ? "#7C3AED" : null, "unassigned")}
-        </div>
         {cardFilter && (
           <div className="card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
@@ -226,51 +241,50 @@ export default function Dashboard() {
               <span style={{ cursor: "pointer", color: "var(--faint)" }} onClick={() => setCardFilter(null)}>✕ close</span>
             </div>
             {filtered.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>No tasks here.</div>
-              : filtered.map((t) => { const st = TSTATUS[t.status] || TSTATUS.todo; return (
+              : filtered.map((t) => { const pill = PILL[t.status] || PILL.todo; return (
                 <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "9px 0", borderTop: "0.5px solid var(--line)" }}>
                   <div style={{ minWidth: 0 }}><div style={{ fontSize: 13 }}>{t.title}</div>
                     <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 1 }}>{t.workspace_id ? t.client : "Personal"}{t.status === "delivered" ? " · submitted " + new Date(t.updated_at).toLocaleDateString() : (t.due_date ? " · due " + t.due_date : "")}</div></div>
                   <span style={{ display: "flex", gap: 6, alignItems: "center", flex: "none" }}>
-                    <span className="pill" style={{ background: st.bg, color: st.fg }}>{st.l}</span>
+                    <span className="pill" style={{ background: pill.bg, color: pill.fg }}>{pill.l}</span>
                     {t.workspace_id && <button className="btn btn-ghost" onClick={() => router.push(`/client/${t.workspace_id}/service/${t.service_key}`)}>Open</button>}
                   </span>
                 </div>); })}
           </div>
         )}
-        <div style={{ display: "flex", gap: 4, background: "var(--cloud,#F5F6F8)", padding: 4, borderRadius: 10, width: "fit-content", marginBottom: 10 }}>
-          {TABS.map(([v, l]) => (<button key={v} onClick={() => setMyTab(v)} className="btn" style={{ padding: "6px 12px", fontSize: 13, background: myTab === v ? "#fff" : "transparent", boxShadow: myTab === v ? "0 1px 2px rgba(0,0,0,.06)" : "none", color: myTab === v ? "var(--text)" : "var(--muted)" }}>{l}</button>))}
-        </div>
-        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>Priority queue <span style={{ fontSize: 12, color: "var(--faint)", fontWeight: 400 }}>· {queue.length} task(s), highest priority first</span></div>
-        {queue.length === 0 ? <div className="empty" style={{ marginTop: 8 }}>Nothing due in this range. Switch the range above, or give a task a due date.</div>
-          : <div className="card">{queue.map((t) => {
-              const pm = PRIO_META[t.priority] || PRIO_META.medium; const st = TSTATUS[t.status] || TSTATUS.todo; const overdue = t.due_date && t.due_date < today;
-              return (<div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 0", borderTop: "0.5px solid var(--line)" }}>
-                <div style={{ minWidth: 0 }}><div style={{ fontSize: 13 }}>{t.title}</div>
-                  <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 1 }}>{t.workspace_id ? t.client + " · " : "Personal · "}{SVC_LABEL[t.service_key] || t.service_key}{t.due_date ? " · due " + t.due_date : ""}</div></div>
-                <div style={{ display: "flex", gap: 6, alignItems: "center", flex: "none" }}>
-                  <span className="pill" style={{ background: pm.bg, color: pm.fg }}>{pm.l}</span>
-                  <span className="pill" style={{ background: overdue ? "#FBEAE6" : st.bg, color: overdue ? "#C0392B" : st.fg }}>{overdue ? "Overdue" : st.l}</span>
-                  {t.workspace_id && <button className="btn btn-ghost" onClick={() => router.push(`/client/${t.workspace_id}/service/${t.service_key}`)}>Open</button>}
-                </div></div>);
-            })}</div>}
 
+        {/* What needs attention */}
         <div className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}><b>What needs attention</b><span className="pill p-agency">demo</span></div>
-          {myCounts.needs_look > 0 ? <div style={{ fontSize: 13 }}>{myCounts.needs_look} item(s) came back from a client — see "Back to you".</div>
-            : <div style={{ fontSize: 13, color: "var(--faint)" }}>Nothing needs your attention right now. The AI signals feed arrives with the analytics wiring.</div>}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}><b>What needs attention</b><span className="pill p-agency">demo signals</span></div>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start", background: "var(--cloud,#F5F6F8)", borderRadius: 10, padding: 12 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 8, background: "#FCEFC3", color: "#7A5B00", fontWeight: 700, fontSize: 13, flex: "none" }}>58</span>
+            <div><div style={{ fontSize: 13 }}>{topClient} · organic clicks down 18% on the top landing page</div>
+              <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 2 }}>Urgency 58 · Confidence 62% · low risk</div></div>
+          </div>
         </div>
 
+        {/* My work */}
+        <div className="card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <b>My work</b>
+            {cUnassigned > 0 && <span style={{ cursor: "pointer", color: "var(--faint)", fontSize: 12 }} onClick={() => setCardFilter("unassigned")}>· {cUnassigned} unassigned</span>}
+          </div>
+          {myTasks.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)", marginTop: 8 }}>No tasks assigned to you yet.</div>
+            : myTasks.map((t) => { const pill = PILL[t.status] || PILL.todo; return (
+              <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "12px 0", borderTop: "0.5px solid var(--line)", cursor: t.workspace_id ? "pointer" : "default" }} onClick={() => t.workspace_id && router.push(`/client/${t.workspace_id}/service/${t.service_key}`)}>
+                <div style={{ minWidth: 0 }}><div style={{ fontSize: 14 }}>{t.title}</div>
+                  <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 1 }}>{t.workspace_id ? t.client : "Personal"}</div></div>
+                <span className="pill" style={{ background: pill.bg, color: pill.fg, flex: "none" }}>{pill.l}</span>
+              </div>); })}
+        </div>
+
+        {/* My clients */}
         <div className="card">
           <b>My clients</b>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
             {myClients.length === 0 ? <span style={{ fontSize: 13, color: "var(--faint)" }}>No clients assigned yet.</span>
-              : myClients.map((c) => (<button key={c.id} className="pill" style={{ border: "0.5px solid var(--line)", cursor: "pointer" }} onClick={() => router.push(`/client/${c.id}/service/${c.serviceKey}`)}>{c.name} →</button>))}
+              : myClients.map((c) => (<button key={c.id} className="pill" style={{ border: "0.5px solid var(--line)", cursor: "pointer" }} onClick={() => router.push(`/client/${c.id}/service/${c.serviceKey}`)}>{c.name}</button>))}
           </div>
-        </div>
-
-        <div className="card" style={{ opacity: 0.7 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><b>Ask Velvet</b><span className="pill p-agency">coming soon</span></div>
-          <div style={{ fontSize: 13, color: "var(--faint)", marginTop: 6 }}>Your AI copilot for this workspace lands in a later build.</div>
         </div>
 
         {showAdd && <AddTask me={profile.id} clients={myClients} onClose={() => setShowAdd(false)} onCreated={() => window.location.reload()} />}

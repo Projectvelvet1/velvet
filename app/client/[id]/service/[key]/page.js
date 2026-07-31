@@ -307,34 +307,40 @@ export default function ClientServiceDashboard() {
 
       {showCompare && (
         <Modal title="You vs competitors" onClose={() => setShowCompare(false)}>
-          <div className="empty" style={{ marginBottom: 12 }}>Organic traffic, organic keywords and backlinks, side by side. <span className="pill p-agency">live · Ahrefs</span></div>
-          {compareBusy && <div style={{ fontSize: 13, color: "var(--faint)", padding: "10px 0" }}>Pulling live Ahrefs data…</div>}
+          <div style={{ fontSize: 12, color: "var(--faint)", marginTop: -6, marginBottom: 12 }}>Organic traffic, top-10 keywords, backlinks · current</div>
+          {compareBusy && <div style={{ fontSize: 13, color: "var(--faint)", padding: "10px 0" }}>Loading…</div>}
           {!compareBusy && (() => {
             const fmt = (n) => (n == null ? "—" : n >= 1000000 ? (n / 1000000).toFixed(1) + "m" : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n));
             const rows = compareData || [];
-            const metrics = [["Organic traffic", "org_traffic"], ["Organic keywords", "org_keywords"], ["Backlinks", "backlinks"]];
-            return metrics.map(([label, field]) => {
-              const max = Math.max(1, ...rows.map((r) => r[field] || 0));
-              return (
-                <div key={field} style={{ marginBottom: 18 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{label}</div>
-                  {rows.map((r, i) => {
-                    const v = r[field]; const pct = v ? Math.max(3, Math.round((v / max) * 100)) : 0;
-                    return (
-                      <div key={i} style={{ display: "grid", gridTemplateColumns: "120px 1fr 56px", gap: 8, alignItems: "center", marginBottom: 7 }}>
-                        <span style={{ fontSize: 12, fontWeight: r.you ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
-                        <div style={{ background: "#EEF1F4", borderRadius: 6, height: 16, overflow: "hidden" }}>
-                          <div style={{ width: pct + "%", height: "100%", borderRadius: 6, background: r.you ? "var(--gold, #F7C948)" : "#2A3550" }} />
-                        </div>
-                        <span style={{ fontSize: 12, textAlign: "right", fontWeight: r.you ? 600 : 400 }}>{fmt(v)}</span>
-                      </div>
-                    );
-                  })}
+            const PAL = [{ bar: "#AFC8F0", bg: "#EAF0FF", fg: "#2557C7" }, { bar: "#B9E0A8", bg: "#E7F6EF", fg: "#177E4E" }, { bar: "#F2B4A3", bg: "#FBEAE6", fg: "#C0392B" }, { bar: "#D9C6F2", bg: "#F0E9FB", fg: "#7C3AED" }];
+            const styleFor = (r, i) => r.you ? { bar: "var(--gold,#F7C948)", bg: "#FCEFC3", fg: "#7A5B00" } : PAL[i % PAL.length];
+            const badge = (r, i) => { const st = styleFor(r, i); return <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, borderRadius: 6, background: st.bg, color: st.fg, fontSize: 11, fontWeight: 700, marginRight: 8 }}>{(r.name || "?").trim().charAt(0).toUpperCase()}</span>; };
+            const maxT = Math.max(1, ...rows.map((r) => r.org_traffic || 0));
+            return (<>
+              {/* table */}
+              <div style={{ display: "grid", gridTemplateColumns: "1.7fr 1fr 1fr 1fr", gap: 6, fontSize: 12, color: "var(--faint)", padding: "0 6px 6px", borderBottom: "0.5px solid var(--line)" }}>
+                <span></span><span style={{ textAlign: "right" }}>Organic traffic</span><span style={{ textAlign: "right" }}>Top-10 kws</span><span style={{ textAlign: "right" }}>Backlinks</span>
+              </div>
+              {rows.map((r, i) => (
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "1.7fr 1fr 1fr 1fr", gap: 6, alignItems: "center", padding: "10px 6px", borderBottom: "0.5px solid var(--line)", fontSize: 13, background: r.you ? "#FCF7E6" : "transparent", borderRadius: r.you ? 6 : 0 }}>
+                  <span style={{ display: "flex", alignItems: "center", fontWeight: r.you ? 600 : 400, minWidth: 0 }}>{badge(r, i)}<span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span></span>
+                  <span style={{ textAlign: "right", fontWeight: r.you ? 600 : 400 }}>{fmt(r.org_traffic)}</span>
+                  <span style={{ textAlign: "right", fontWeight: r.you ? 600 : 400 }}>{fmt(r.org_keywords)}</span>
+                  <span style={{ textAlign: "right", fontWeight: r.you ? 600 : 400 }}>{fmt(r.backlinks)}</span>
                 </div>
-              );
-            });
+              ))}
+              {/* organic-traffic bars */}
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--seo,#2557C7)", margin: "16px 0 8px" }}>Organic traffic</div>
+              {rows.map((r, i) => { const st = styleFor(r, i); const pct = r.org_traffic ? Math.max(3, Math.round((r.org_traffic / maxT) * 100)) : 0; return (
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "90px 1fr 48px", gap: 8, alignItems: "center", marginBottom: 7 }}>
+                  <span style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(r.name || "").replace(" (you)", "")}</span>
+                  <div style={{ background: "#EEF1F4", borderRadius: 6, height: 15, overflow: "hidden" }}><div style={{ width: pct + "%", height: "100%", borderRadius: 6, background: st.bar }} /></div>
+                  <span style={{ fontSize: 12, textAlign: "right", color: "var(--faint)" }}>{fmt(r.org_traffic)}</span>
+                </div>
+              ); })}
+              {(compareData || []).some((r) => !r.you && r.org_traffic == null) && <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 8 }}>A "—" means that competitor was added as a name, not a domain. Edit it to a domain for live data.</div>}
+            </>);
           })()}
-          {!compareBusy && (compareData || []).some((r) => !r.you && r.org_traffic == null) && <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 4 }}>A "—" bar means that competitor was added as a name, not a domain. Edit it to a domain (e.g. sportpesa.com) for live data.</div>}
         </Modal>
       )}
     </Shell>
