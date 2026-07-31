@@ -57,7 +57,7 @@ export default function Clients() {
       setDepts(await loadAgencyDepts(session.user.id, !!prof?.is_super_admin));
       if (prof?.side !== "agency") { router.replace("/dashboard"); return; }
       setProfile(prof);
-      const { data: tm } = await supabase.from("profiles").select("id,full_name,email,home_department").eq("side", "agency").order("full_name");
+      const { data: tm } = await supabase.from("profiles").select("id,full_name,email,home_department,home_service").eq("side", "agency").order("full_name");
       setTeam(tm || []);
       await load(); setLoading(false);
     })();
@@ -196,8 +196,8 @@ export default function Clients() {
                     </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                       {(() => {
-                        const eligible = team.filter((p) => p.home_department === SVC_DEPT[s.service_key]);
-                        if (eligible.length === 0) return <span style={{ fontSize: 12, color: "var(--faint)" }}>No {SVC_DEPT[s.service_key]} teammates yet. Set their department on the Team page.</span>;
+                        const eligible = team.filter((p) => p.home_service === s.service_key);
+                        if (eligible.length === 0) return <span style={{ fontSize: 12, color: "var(--faint)" }}>No one is set to {s.service_label} yet. Set their service on the Team page.</span>;
                         return eligible.map((p) => {
                           const on = (assign[s.service_key] || []).includes(p.id);
                           return (
