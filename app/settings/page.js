@@ -40,13 +40,11 @@ export default function Settings() {
     <Shell profile={profile} roleLabel={roleLabel} nav={nav}>
       <div className="page-head"><h1 style={{ fontSize: 24 }}>Settings</h1><span className="pill p-agency">{roleLabel}</span></div>
 
-      {profile?.is_super_admin && (<>
       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--muted)", margin: "4px 0 8px" }}>Team &amp; access</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-        {tile("Invite teammate", "Add someone from your agency and set what they can access.", "/invite")}
-        {tile("Team", "See everyone in the agency, edit details, change access, or remove people.", "/team")}
+        {profile?.is_super_admin && tile("Invite teammate", "Add someone from your agency and set what they can access.", "/invite")}
+        {tile("Team", profile?.is_super_admin ? "See everyone, edit details, change access, or remove people." : "See everyone in the agency and who does what.", "/team")}
       </div>
-      </>)}
 
       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--muted)", margin: "4px 0 8px" }}>Configuration</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>

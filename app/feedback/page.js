@@ -27,6 +27,7 @@ export default function Feedback() {
       const uid = session.user.id;
       const { data: prof } = await supabase.from("profiles").select("full_name,email,side,is_super_admin").eq("id", uid).single();
       if (prof?.side !== "agency") { router.replace("/dashboard"); return; }
+      if (!prof?.is_super_admin) { router.replace("/dashboard"); return; }
       setProfile(prof);
       setDepts(await loadAgencyDepts(uid, !!prof.is_super_admin));
       const { data: fq } = await supabase.from("feedback_questions").select("question_key,label,sort_order").order("sort_order");

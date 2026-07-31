@@ -53,7 +53,7 @@ export default function Clients() {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.replace("/login"); return; }
-      const { data: prof } = await supabase.from("profiles").select("full_name,email,side,is_super_admin").eq("id", session.user.id).single();
+      const { data: prof } = await supabase.from("profiles").select("full_name,email,side,is_super_admin,home_service").eq("id", session.user.id).single();
       setDepts(await loadAgencyDepts(session.user.id, !!prof?.is_super_admin));
       if (prof?.side !== "agency") { router.replace("/dashboard"); return; }
       setProfile(prof);
@@ -144,7 +144,9 @@ export default function Clients() {
             {(!c.services || c.services.length === 0) && <span style={{ fontSize: 12, color: "var(--faint)" }}>No services yet</span>}
           </div>
           <div style={{ marginTop: 10 }}>
-            <button className="btn btn-ghost" onClick={() => router.push(`/client/${c.id}`)}>Open (view as)</button>
+            {canAdd
+              ? <button className="btn btn-ghost" onClick={() => router.push(`/client/${c.id}`)}>Open (view as)</button>
+              : <button className="btn btn-ghost" onClick={() => router.push(profile?.home_service ? `/client/${c.id}/service/${profile.home_service}` : `/client/${c.id}`)}>Open</button>}
             {canAdd && <button className="btn btn-ghost" style={{ color: "var(--danger)", marginLeft: 8 }} onClick={() => deleteClient(c)}>Delete</button>}
           </div>
         </div>
