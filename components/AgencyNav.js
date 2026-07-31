@@ -43,7 +43,6 @@ export default function AgencyNav({ profile, active, depts = [] }) {
 
       <div className="grp">Team</div>
       <nav className="nav">
-        {item("team", "Team", "/team")}
         <a>Replays</a>
         {item("feedback", "Clients feedback", "/feedback")}
         {item("settings", "Settings", "/settings")}

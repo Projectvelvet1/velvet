@@ -40,16 +40,18 @@ export default function Settings() {
     <Shell profile={profile} roleLabel={roleLabel} nav={nav}>
       <div className="page-head"><h1 style={{ fontSize: 24 }}>Settings</h1><span className="pill p-agency">{roleLabel}</span></div>
 
+      {profile?.is_super_admin && (<>
       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--muted)", margin: "4px 0 8px" }}>Team &amp; access</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
         {tile("Invite teammate", "Add someone from your agency and set what they can access.", "/invite")}
         {tile("Team", "See everyone in the agency, edit details, change access, or remove people.", "/team")}
       </div>
+      </>)}
 
       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--muted)", margin: "4px 0 8px" }}>Configuration</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
         {tile("Ask Velvet training", "Teach Ask Velvet how each department wants its answers, and which data sources to use.", "/settings/velvet")}
-        {tile("Onboarding questions", "Manage the questions clients answer during onboarding and discovery.", "/questions")}
+        {profile?.is_super_admin && tile("Onboarding questions", "Manage the questions clients and future clients answer.", "/questions")}
       </div>
 
       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--muted)", margin: "4px 0 8px" }}>Coming soon</div>

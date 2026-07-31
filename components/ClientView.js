@@ -32,6 +32,7 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   const [deptOpen, setDeptOpen] = useState(null);
   const [meId, setMeId] = useState(null);
   const [showAssign, setShowAssign] = useState(false);
+  const [clientTab, setClientTab] = useState("home");
   const [cvAgency, setCvAgency] = useState([]);
   const [cvClient, setCvClient] = useState([]);
   const [team, setTeam] = useState(null);
@@ -256,13 +257,12 @@ export default function ClientView({ workspace, services = [], profile, viewingA
         </h3>
         {answersOpen && (
           <div style={{ display: "flex", gap: 8 }}>
-            {viewingAs && <button className="btn btn-ghost" onClick={() => router.push(`/questions?phase=${answersPhase}`)}>Edit questions</button>}
             <button className="btn btn-ghost" onClick={openEdit}>{hasAny ? "Edit answers" : "Fill in answers"}</button>
           </div>
         )}
       </div>
       {!answersOpen ? null : flat.length === 0 ? (
-        <div className="empty">No questions have been set up yet.{viewingAs ? " Use “Edit questions” to add them." : ""}</div>
+        <div className="empty">No questions have been set up yet.{viewingAs ? " Set them up in Settings → Onboarding questions." : ""}</div>
       ) : (
         <div className="faq">
           {flat.map((q) => {
@@ -295,7 +295,7 @@ export default function ClientView({ workspace, services = [], profile, viewingA
         <span className="pill p-client">{isProspect ? "Discovery" : "Client"}</span>
       </div>
 
-      {!viewingAs && !isProspect && (
+      {!viewingAs && !isProspect && clientTab === "home" && (
         <div className="card" style={{ borderColor: "var(--border-accent)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
             <div><b>How are we doing?</b><div style={{ color: "var(--muted)", fontSize: 13, marginTop: 2 }}>Share your feedback on the services we deliver.</div></div>
@@ -362,12 +362,23 @@ export default function ClientView({ workspace, services = [], profile, viewingA
             </div>
           ))}
         </>
+      ) : viewingAs ? (
+        <>
+          <div className="card"><b>{workspace.name}</b><p style={{ color: "var(--muted)", margin: "6px 0 0", fontSize: 14 }}>Dashboards are ready.</p></div>
+          {answersSection}
+          {deptDrilldown}
+        </>
       ) : (
         <>
-          <div className="card"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><b>{workspace.name}</b><p style={{ color: "var(--muted)", margin: "6px 0 0", fontSize: 14 }}>Dashboards are ready.</p></div>{!viewingAs && <button className="btn btn-primary" onClick={() => setShowAssign(true)}>Assign a task</button>}</div></div>
-          {answersSection}
-          {viewingAs ? deptDrilldown : (
+          <div style={{ display: "flex", gap: 4, background: "var(--cloud,#F5F6F8)", padding: 4, borderRadius: 10, width: "fit-content", marginBottom: 14 }}>
+            {[["home", "Home"], ["settings", "Settings"]].map(([v, l]) => (
+              <button key={v} onClick={() => setClientTab(v)} className="btn" style={{ padding: "6px 16px", fontSize: 13, background: clientTab === v ? "#fff" : "transparent", boxShadow: clientTab === v ? "0 1px 2px rgba(0,0,0,.06)" : "none", color: clientTab === v ? "var(--text)" : "var(--muted)" }}>{l}</button>
+            ))}
+          </div>
+          {clientTab === "home" ? (
             <>
+              <div className="card"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><b>{workspace.name}</b><p style={{ color: "var(--muted)", margin: "6px 0 0", fontSize: 14 }}>Dashboards are ready.</p></div><button className="btn btn-primary" onClick={() => setShowAssign(true)}>Assign a task</button></div></div>
+              {answersSection}
               <h3 style={{ fontSize: 16, margin: "22px 0 10px" }}>Your services &amp; who handles them</h3>
               {(team?.agencyByService || services.map((s) => ({ service_key: s.service_key, service_label: s.service_label, department: DEPT_LABEL[s.department], people: [] }))).map((s) => (
                 <div className={"card svc-card svc svc-" + s.service_key} key={s.service_key} style={{ cursor: "pointer" }} onClick={() => router.push(`/client/${workspace.id}/service/${s.service_key}`)}>
@@ -375,8 +386,10 @@ export default function ClientView({ workspace, services = [], profile, viewingA
                   <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 3 }}>{s.people && s.people.length ? "Your agency team: " + s.people.map((x) => x.name).join(", ") : "Team being assigned"}</div>
                 </div>
               ))}
-
-              <h3 style={{ fontSize: 16, margin: "22px 0 10px" }}>Your team</h3>
+            </>
+          ) : (
+            <>
+              <h3 style={{ fontSize: 16, margin: "6px 0 10px" }}>Your team</h3>
               <div className="card">
                 <div style={{ fontSize: 12, color: "var(--faint)", marginBottom: 8 }}>Add your colleagues. Everyone you add gets the same access you have, and can assign tasks to your agency team.</div>
                 {(team?.clientTeam || []).length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)", marginBottom: 10 }}>No teammates added yet.</div>
@@ -397,6 +410,12 @@ export default function ClientView({ workspace, services = [], profile, viewingA
                   {teamMsg && <div style={{ fontSize: 12, color: "#177E4E", marginTop: 8 }}>{teamMsg}</div>}
                   <button className="btn btn-primary" style={{ marginTop: 10 }} disabled={teamBusy}>{teamBusy ? "Adding…" : "Add teammate"}</button>
                 </form>
+              </div>
+
+              <h3 style={{ fontSize: 16, margin: "22px 0 10px" }}>Documents</h3>
+              <div className="card" style={{ opacity: 0.75 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><b>Documents</b><span className="pill p-agency">coming soon</span></div>
+                <div style={{ fontSize: 13, color: "var(--faint)", marginTop: 6 }}>Your reports, QBRs and shared decks will live here.</div>
               </div>
             </>
           )}
