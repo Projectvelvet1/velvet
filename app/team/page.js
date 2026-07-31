@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import Shell from "../../components/Shell";
 import AgencyNav from "../../components/AgencyNav";
-import { loadAgencyDepts } from "../../lib/agencyNav";
+import { loadAgencyDepts, DEPARTMENTS } from "../../lib/agencyNav";
 import Modal from "../../components/Modal";
 import ConfirmDelete from "../../components/ConfirmDelete";
 
@@ -23,7 +23,7 @@ export default function Team() {
 
   async function load() {
     const { data } = await supabase
-      .from("profiles").select("id,full_name,email,job_title,home_department,is_super_admin")
+      .from("profiles").select("id,full_name,email,job_title,home_department,home_service,is_super_admin")
       .eq("side", "agency").order("full_name", { ascending: true });
     setTeam(data || []);
   }
@@ -38,7 +38,7 @@ export default function Team() {
     })();
   }, [router]);
 
-  function openEdit(p) { setErr(""); setEdit({ ...p, fullName: p.full_name || "", jobTitle: p.job_title || "", homeDepartment: p.home_department || "", isSuper: !!p.is_super_admin }); }
+  function openEdit(p) { setErr(""); setEdit({ ...p, fullName: p.full_name || "", jobTitle: p.job_title || "", homeDepartment: p.home_department || "", homeService: p.home_service || "", isSuper: !!p.is_super_admin }); }
 
   async function save(e) {
     e.preventDefault(); setBusy(true); setErr("");
@@ -46,6 +46,7 @@ export default function Team() {
       full_name: (edit.fullName || "").trim() || null,
       job_title: (edit.jobTitle || "").trim() || null,
       home_department: edit.homeDepartment || null,
+      home_service: edit.homeService || null,
       is_super_admin: !!edit.isSuper,
     };
     const { error } = await supabase.from("profiles").update(patch).eq("id", edit.id);
@@ -100,11 +101,16 @@ export default function Team() {
             <div className="field"><label>Job title</label>
               <input className="input" value={edit.jobTitle} onChange={(e) => setEdit({ ...edit, jobTitle: e.target.value })} placeholder="e.g. SEO Lead" /></div>
             <div className="field"><label>Home department</label>
-              <select className="input" value={edit.homeDepartment} onChange={(e) => setEdit({ ...edit, homeDepartment: e.target.value })}>
+              <select className="input" value={edit.homeDepartment} onChange={(e) => setEdit({ ...edit, homeDepartment: e.target.value, homeService: "" })}>
                 <option value="">Select department…</option>
                 <option value="performance">Performance</option>
                 <option value="content">Content</option>
                 <option value="analytics">Analytics</option>
+              </select></div>
+            <div className="field"><label>Service they do</label>
+              <select className="input" value={edit.homeService || ""} onChange={(e) => setEdit({ ...edit, homeService: e.target.value })} disabled={!edit.homeDepartment}>
+                <option value="">{edit.homeDepartment ? "Select service…" : "Pick a department first"}</option>
+                {(DEPARTMENTS.find((d) => d.key === edit.homeDepartment)?.services || []).map((sv) => <option key={sv.key} value={sv.key}>{sv.label}</option>)}
               </select></div>
             <div className="field"><label>Access level</label>
               <select className="input" value={edit.isSuper ? "super" : "member"} disabled={edit.id === profile?.id} onChange={(e) => setEdit({ ...edit, isSuper: e.target.value === "super" })}>

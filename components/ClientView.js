@@ -59,7 +59,7 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   useEffect(() => { setWsLocal(workspace); }, [workspace]);
   async function loadAssignments() {
     if (!workspace?.id) return;
-    const { data: everyone } = await supabase.from("profiles").select("id,full_name,email,home_department").eq("side", "agency");
+    const { data: everyone } = await supabase.from("profiles").select("id,full_name,email,home_department,home_service").eq("side", "agency");
     setAllTeam(everyone || []);
     const nameOf = (id) => { const pr = (everyone || []).find((x) => x.id === id); return pr ? (pr.full_name || pr.email) : "Unknown"; };
     const { data: asg } = await supabase.from("service_assignments").select("service_key,profile_id").eq("workspace_id", workspace.id);
@@ -211,7 +211,7 @@ export default function ClientView({ workspace, services = [], profile, viewingA
                   {grouped[dep].map((s) => {
                     const people = svcPeople[s.service_key] || [];
                     const assignedIds = new Set(people.map((p) => p.id));
-                    const eligible = allTeam.filter((t) => t.home_department === SVC_DEP[s.service_key] && !assignedIds.has(t.id));
+                    const eligible = allTeam.filter((t) => t.home_service === s.service_key && !assignedIds.has(t.id));
                     return (
                       <div key={s.service_key} style={{ padding: "10px 6px", borderTop: "0.5px solid var(--line)" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>

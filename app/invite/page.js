@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import Shell from "../../components/Shell";
 import AgencyNav from "../../components/AgencyNav";
-import { loadAgencyDepts } from "../../lib/agencyNav";
+import { loadAgencyDepts, DEPARTMENTS } from "../../lib/agencyNav";
 import Modal from "../../components/Modal";
 
 export default function Invite() {
@@ -18,6 +18,7 @@ export default function Invite() {
   const [fullName, setFullName] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [homeDepartment, setHomeDepartment] = useState("");
+  const [homeService, setHomeService] = useState("");
   const [level, setLevel] = useState("team");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -40,7 +41,7 @@ export default function Invite() {
     const { data } = await supabase.auth.getSession();
     const res = await fetch("/api/invite", {
       method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` },
-      body: JSON.stringify({ email, fullName, jobTitle, homeDepartment: homeDepartment || null, level }),
+      body: JSON.stringify({ email, fullName, jobTitle, homeDepartment: homeDepartment || null, homeService: homeService || null, level }),
     });
     const j = await res.json(); setBusy(false);
     if (!res.ok) { setErr(j.error || "Could not send invite"); return; }
@@ -86,12 +87,18 @@ export default function Invite() {
             <div className="field"><label>Job title</label>
               <input className="input" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="e.g. Paid Media Specialist" /></div>
             <div className="field"><label>Home department</label>
-              <select className="input" value={homeDepartment} onChange={(e) => setHomeDepartment(e.target.value)}>
+              <select className="input" value={homeDepartment} onChange={(e) => { setHomeDepartment(e.target.value); setHomeService(""); }}>
                 <option value="">Select department…</option>
                 <option value="performance">Performance</option>
                 <option value="content">Content</option>
                 <option value="analytics">Analytics</option>
               </select></div>
+            <div className="field"><label>Service they do</label>
+              <select className="input" value={homeService} onChange={(e) => setHomeService(e.target.value)} disabled={!homeDepartment}>
+                <option value="">{homeDepartment ? "Select service…" : "Pick a department first"}</option>
+                {(DEPARTMENTS.find((d) => d.key === homeDepartment)?.services || []).map((sv) => <option key={sv.key} value={sv.key}>{sv.label}</option>)}
+              </select>
+              <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 5 }}>This is the service whose clients they'll work on.</div></div>
             <div className="field"><label>Access level</label>
               <select className="input" value={level} onChange={(e) => setLevel(e.target.value)}>
                 <option value="team">Team member</option>

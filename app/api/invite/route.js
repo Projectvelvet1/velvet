@@ -30,6 +30,7 @@ export async function POST(req) {
   const fullName = (body?.fullName || "").trim();
   const jobTitle = (body?.jobTitle || "").trim();
   const homeDepartment = body?.homeDepartment || null;
+  const homeService = body?.homeService || null;
   const makeSuper = body?.level === "super";  // only an existing super admin reaches this route
   if (!email || !email.includes("@")) return Response.json({ error: "A valid email is required" }, { status: 400 });
 
@@ -50,7 +51,7 @@ export async function POST(req) {
   // store job title + home department on their profile
   if (data?.user?.id) {
     await db.from("profiles").upsert(
-      { id: data.user.id, email, side, job_title: jobTitle || null, home_department: homeDepartment, is_super_admin: makeSuper },
+      { id: data.user.id, email, side, job_title: jobTitle || null, home_department: homeDepartment, home_service: homeService, is_super_admin: makeSuper },
       { onConflict: "id" }
     );
   }
