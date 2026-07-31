@@ -47,6 +47,7 @@ export default function AgencyNav({ profile, active, depts = [] }) {
         {item("team", "Team", "/team")}
         <a>Replays</a>
         {item("feedback", "Clients feedback", "/feedback")}
+        {item("settings", "Settings", "/settings")}
         <a>Reports &amp; docs</a>
       </nav>
     </>
