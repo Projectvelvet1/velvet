@@ -417,6 +417,7 @@ export default function ClientServiceDashboard() {
       </div>
 
 
+      {!isClient && (
       <div className="card" style={{ marginTop: 12 }}>
         <b>{svc?.label} tasks for {ws?.name}</b>
         <div style={{ fontSize: 12, color: "var(--faint)", margin: "2px 0 10px" }}>The team's action plan for this client. Move items To do → In progress → Delivered.</div>
@@ -472,8 +473,7 @@ export default function ClientServiceDashboard() {
           });
         })()}
       </div>
-
-
+      )}
 
       <div className="card" style={{ marginTop: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>

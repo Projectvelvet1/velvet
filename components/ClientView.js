@@ -39,7 +39,7 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   useEffect(() => {
     if (viewingAs || !meId || !workspace?.id) return;
     (async () => {
-      const { data } = await supabase.from("tasks").select("id,title,status,assignee_id,client_note,created_at,due_date,priority,frequency,description,deliverable_link,updated_at,share_with").eq("workspace_id", workspace.id).or(`assignee_id.eq.${meId},share_with.eq.client`).order("created_at", { ascending: false });
+      const { data } = await supabase.from("tasks").select("id,title,status,assignee_id,client_note,created_at,due_date,priority,frequency,description,deliverable_link,updated_at").eq("workspace_id", workspace.id).order("created_at", { ascending: false });
       setMyTasks(data || []);
     })();
   }, [meId, workspace?.id, viewingAs]);
@@ -402,14 +402,14 @@ export default function ClientView({ workspace, services = [], profile, viewingA
             <>
               <h3 style={{ fontSize: 16, margin: "6px 0 10px" }}>Your tasks</h3>
               <div className="card">
-                <div style={{ fontSize: 12, color: "var(--faint)", marginBottom: 8 }}>Tasks the agency has assigned to you or shared with your team.</div>
+                <div style={{ fontSize: 12, color: "var(--faint)", marginBottom: 8 }}>Tasks assigned to you. If you lead this account, you also see tasks assigned to your teammates and who they went to.</div>
                 {myTasks.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>Nothing assigned to you yet.</div>
-                  : myTasks.map((t) => (
+                  : myTasks.map((t) => { const who = t.assignee_id === meId ? "you" : (((team?.clientTeam || []).find((m) => m.id === t.assignee_id) || {}).name || "a teammate"); return (
                       <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 0", borderTop: "0.5px solid var(--line)" }}>
-                        <div style={{ minWidth: 0 }}><div style={{ fontSize: 13 }}>{t.title}</div><div style={{ fontSize: 11, color: "var(--faint)", marginTop: 1 }}>{t.due_date ? "due " + t.due_date : "no due date"}</div></div>
+                        <div style={{ minWidth: 0 }}><div style={{ fontSize: 13 }}>{t.title}</div><div style={{ fontSize: 11, color: "var(--faint)", marginTop: 1 }}>To: {who}{t.due_date ? " · due " + t.due_date : ""}</div></div>
                         <button className="btn btn-ghost" style={{ padding: "4px 10px", flex: "none" }} onClick={() => setOpenTask(t)}>Open</button>
                       </div>
-                    ))}
+                    ); })}
               </div>
             </>
           ) : (
