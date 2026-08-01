@@ -141,63 +141,73 @@ export default function ClientServiceDashboard() {
     loadComps();
   }
 
-  function bucketQuarters(pts) {
+  function monthlyFromDaily(daily) {
     const m = {};
-    pts.forEach((p) => { const dt = new Date(p.label); const qk = dt.getFullYear() + "-Q" + (Math.floor(dt.getMonth() / 3) + 1); if (!m[qk]) m[qk] = { label: qk, traffic: 0, keywords: 0 }; m[qk].traffic += (p.traffic || 0); m[qk].keywords = p.keywords || m[qk].keywords; });
-    return Object.values(m);
+    (daily || []).forEach((x) => { const dt = new Date(x.date); const k = dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0"); if (!m[k]) m[k] = { label: k + "-01", clicks: 0 }; m[k].clicks += x.clicks || 0; });
+    return Object.values(m).sort((a, b) => (a.label < b.label ? -1 : 1));
+  }
+  function monthlyToQuarters(monthly, valKey) {
+    const m = {};
+    (monthly || []).forEach((x) => { const dt = new Date(x.label); const k = dt.getFullYear() + "-Q" + (Math.floor(dt.getMonth() / 3) + 1); if (!m[k]) m[k] = { label: k, value: 0 }; m[k].value += Number(x[valKey]) || 0; });
+    return Object.values(m).sort((a, b) => (a.label < b.label ? -1 : 1));
   }
   async function loadTrend() {
     if (!ws?.website) { setTrendSeries([]); return; }
     setTrendBusy(true); setTrendErr("");
-    const d = new Date(); let grouping = "monthly";
-    if (trendWin === "quarterly") { d.setMonth(d.getMonth() - 24); }
-    else if (trendWin === "6m") { d.setMonth(d.getMonth() - 6); }
-    else { d.setMonth(d.getMonth() - 12); }
+    const d = new Date(); d.setMonth(d.getMonth() - 25);
     const date_from = d.toISOString().slice(0, 10);
     try {
       const { data: sess } = await supabase.auth.getSession();
       const H = { Authorization: `Bearer ${sess.session?.access_token}` };
-      const r = await fetch(`/api/ahrefs?kind=history&grouping=${grouping}&date_from=${date_from}&target=${encodeURIComponent(ws.website)}`, { headers: H });
+      const r = await fetch(`/api/ahrefs?kind=history&grouping=monthly&date_from=${date_from}&target=${encodeURIComponent(ws.website)}`, { headers: H });
       const j = await r.json(); setTrendBusy(false);
       if (!j.ok) { setTrendErr("Trend source said: " + String(j.message || j.error || "no response").slice(0, 140)); setTrendSeries([]); return; }
-      let pts = (j.series || []).map((x) => ({ label: x.date, traffic: x.org_traffic, keywords: x.org_keywords }));
-      if (trendWin === "quarterly") pts = bucketQuarters(pts);
+      const pts = (j.series || []).map((x) => ({ label: x.date, traffic: x.org_traffic })).sort((a, b) => (a.label < b.label ? -1 : 1));
       setTrendSeries(pts);
     } catch (e) { setTrendBusy(false); setTrendErr("Couldn't load the trend."); setTrendSeries([]); }
   }
-  function bucketClicks(series, win) {
-    if (!series || !series.length) return [];
-    const from = new Date();
-    if (win === "6m") from.setMonth(from.getMonth() - 6);
-    else if (win === "quarterly") from.setMonth(from.getMonth() - 24);
-    else from.setMonth(from.getMonth() - 12);
-    const keyOf = (d) => { const dt = new Date(d);
-      if (win === "quarterly") return dt.getFullYear() + "-Q" + (Math.floor(dt.getMonth() / 3) + 1);
-      return dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0"); };
-    const m = {};
-    series.filter((x) => new Date(x.date) >= from).forEach((x) => { const k = keyOf(x.date); if (!m[k]) m[k] = { label: k, clicks: 0 }; m[k].clicks += (x.clicks || 0); });
-    return Object.values(m);
-  }
-  function trendChart(series, valKey) {
-    const vals = series.map((p) => Number(p[valKey]) || 0);
-    const max = Math.max(...vals, 1);
-    const idx = (hoverIdx != null && hoverIdx >= 0 && hoverIdx < series.length) ? hoverIdx : series.length - 1;
-    const cur = vals[idx], prev = vals[idx - 1];
-    const pct = (prev && prev > 0) ? Math.round(((cur - prev) / prev) * 100) : null;
-    const periodWord = trendWin === "quarterly" ? "quarter" : trendWin === "1y" ? "year" : "month";
+  function trendChart(win, monthly, valKey) {
     const fmt = (l) => { if (String(l).includes("Q")) return l; const dt = new Date(l); return isNaN(dt) ? l : dt.toLocaleString("en", { month: "short" }) + " " + String(dt.getFullYear()).slice(2); };
+    let full, bars, base, periodWord, labelAt;
+    if (win === "quarterly") {
+      full = monthlyToQuarters(monthly, valKey);
+      bars = full.slice(-8); base = full.length - bars.length; periodWord = "quarter";
+      labelAt = (fi) => full[fi].label;
+      var valueAt = (fi) => full[fi] ? full[fi].value : 0;
+      var compareAt = (fi) => { const prev = full[fi - 1]; return prev && prev.value > 0 ? Math.round(((full[fi].value - prev.value) / prev.value) * 100) : null; };
+    } else {
+      full = monthly.map((x) => ({ label: x.label, value: Number(x[valKey]) || 0 }));
+      const showN = win === "6m" ? 6 : 12;
+      bars = full.slice(-showN); base = full.length - bars.length;
+      labelAt = (fi) => full[fi].label;
+      var valueAt = (fi) => full[fi] ? full[fi].value : 0;
+      if (win === "1y") { periodWord = "year"; var compareAt = (fi) => { const prev = full[fi - 12]; return prev && prev.value > 0 ? Math.round(((full[fi].value - prev.value) / prev.value) * 100) : null; }; }
+      else { periodWord = "month"; var compareAt = (fi) => { const prev = full[fi - 1]; return prev && prev.value > 0 ? Math.round(((full[fi].value - prev.value) / prev.value) * 100) : null; }; }
+    }
+    const barVals = bars.map((_, i) => valueAt(base + i));
+    const max = Math.max(...barVals, 1);
+    const hovering = hoverIdx != null && hoverIdx >= 0 && hoverIdx < bars.length;
+    const idx = hovering ? hoverIdx : bars.length - 1;
+    let headVal, headPct, headWord, headLabel;
+    if (win === "6m" && !hovering) {
+      const last6 = full.slice(-6).reduce((a, b) => a + b.value, 0);
+      const prev6 = full.slice(-12, -6).reduce((a, b) => a + b.value, 0);
+      headVal = last6; headWord = "6 months"; headLabel = "last 6 months"; headPct = prev6 > 0 ? Math.round(((last6 - prev6) / prev6) * 100) : null;
+    } else {
+      const fi = base + idx; headVal = valueAt(fi); headPct = compareAt(fi); headWord = periodWord; headLabel = fmt(labelAt(fi));
+    }
     return (
       <>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12 }}>
-          <span style={{ fontSize: 26, fontWeight: 700 }}>{cur.toLocaleString()}</span>
-          <span style={{ fontSize: 12, color: "var(--faint)" }}>{fmt(series[idx]?.label)}</span>
-          {pct != null && <span style={{ fontSize: 13, color: pct >= 0 ? "#177E4E" : "var(--danger)" }}>{pct >= 0 ? "▲" : "▼"} {Math.abs(pct)}% vs previous {periodWord}</span>}
+          <span style={{ fontSize: 26, fontWeight: 700 }}>{headVal.toLocaleString()}</span>
+          <span style={{ fontSize: 12, color: "var(--faint)" }}>{headLabel}</span>
+          {headPct != null && <span style={{ fontSize: 13, color: headPct >= 0 ? "#177E4E" : "var(--danger)" }}>{headPct >= 0 ? "\u25B2" : "\u25BC"} {Math.abs(headPct)}% vs previous {headWord}</span>}
         </div>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 130 }}>
-          {series.map((p, i) => { const v = Number(p[valKey]) || 0; const h = Math.max(4, Math.round((v / max) * 110)); const active = i === idx; return (
+          {bars.map((b, i) => { const v = barVals[i]; const h = Math.max(4, Math.round((v / max) * 110)); const active = i === idx; return (
             <div key={i} onMouseEnter={() => setHoverIdx(i)} onMouseLeave={() => setHoverIdx(null)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, cursor: "pointer" }} title={v.toLocaleString()}>
               <div style={{ width: "100%", height: h, background: active ? "#2557C7" : "var(--line)", borderRadius: "6px 6px 0 0", transition: "background .12s" }} />
-              <span style={{ fontSize: 10, color: active ? "var(--text)" : "var(--faint)", whiteSpace: "nowrap" }}>{fmt(p.label)}</span>
+              <span style={{ fontSize: 10, color: active ? "var(--text)" : "var(--faint)", whiteSpace: "nowrap" }}>{fmt(labelAt(base + i))}</span>
             </div>
           ); })}
         </div>
@@ -207,7 +217,7 @@ export default function ClientServiceDashboard() {
   async function loadGsc() {
     const { data: sess } = await supabase.auth.getSession();
     const H = { Authorization: `Bearer ${sess.session?.access_token}` };
-    const r = await fetch(`/api/gsc/data?workspaceId=${id}&series=1&days=365`, { headers: H });
+    const r = await fetch(`/api/gsc/data?workspaceId=${id}&series=1&days=490`, { headers: H });
     const j = await r.json();
     if (j.ok) { setGscTotals(j.totals); setGscSeries(j.series || []); setGscProp(j.property); setGscReason(""); return; }
     setGscTotals(null); setGscSeries(null); setGscProp(null); setGscReason(j.reason || "no_data");
@@ -241,7 +251,7 @@ export default function ClientServiceDashboard() {
     await supabase.from("service_documents").delete().eq("id", docId);
     loadDocs();
   }
-  useEffect(() => { if (ws?.website) loadTrend(); /* eslint-disable-next-line */ }, [trendWin, ws?.website]);
+  useEffect(() => { if (ws?.website) loadTrend(); /* eslint-disable-next-line */ }, [ws?.website]);
   useEffect(() => { if (uid) loadGsc(); /* eslint-disable-next-line */ }, [uid]);
 
   async function loadTasks() {
@@ -366,12 +376,12 @@ export default function ClientServiceDashboard() {
         {trendMetric === "clicks"
           ? (!gscProp
               ? <div style={{ fontSize: 13, color: "var(--faint)" }}>{isClient ? "Clicks appear once your team connects this data." : "Match this client to a Search Console property in the Search performance section above to see clicks."}</div>
-              : (() => { const ser = bucketClicks(gscSeries || [], trendWin); return ser.length ? trendChart(ser, "clicks") : <div style={{ fontSize: 13, color: "var(--faint)" }}>No Search Console clicks for this range yet.</div>; })())
+              : (() => { const monthly = monthlyFromDaily(gscSeries || []); return monthly.length ? trendChart(trendWin, monthly, "clicks") : <div style={{ fontSize: 13, color: "var(--faint)" }}>No Search Console clicks for this range yet.</div>; })())
           : !ws?.website ? <div style={{ fontSize: 13, color: "var(--faint)" }}>Add this client's website to see trends.</div>
           : trendBusy ? <div style={{ fontSize: 13, color: "var(--faint)" }}>Loading trend…</div>
           : trendErr ? <div style={{ fontSize: 13, color: "var(--faint)" }}>{trendErr}</div>
           : trendSeries.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>No trend data for this range yet.</div>
-          : trendChart(trendSeries, "traffic")}
+          : trendChart(trendWin, trendSeries, "traffic")}
       </div>
 
       {isSeo && (() => {
