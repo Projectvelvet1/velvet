@@ -7,6 +7,7 @@ import AgencyNav from "../../../../../components/AgencyNav";
 import Modal from "../../../../../components/Modal";
 import AddTask from "../../../../../components/AddTask";
 import AssignTask from "../../../../../components/AssignTask";
+import AskVelvet from "../../../../../components/AskVelvet";
 import { loadAgencyDepts, DEPARTMENTS } from "../../../../../lib/agencyNav";
 
 export const dynamic = "force-dynamic";
@@ -159,6 +160,8 @@ export default function ClientServiceDashboard() {
         {!isClient && <span className="pill p-agency">Oversight</span>}
       </div>
       {!isClient && <div className="empty" style={{ marginBottom: 14 }}>You're seeing exactly what the {svc?.label || "service"} team sees for this client. Internal, the client sees only the reports.</div>}
+
+      {!isClient && <AskVelvet focusWorkspaceId={id} serviceKey={key} suggestions={[`How is ${ws?.name || "this client"} doing vs competitors?`, `What should we prioritise for ${ws?.name || "this client"}?`]} />}
 
       {!isClient && (
       <div className="card">

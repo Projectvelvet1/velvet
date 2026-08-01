@@ -71,7 +71,19 @@ export async function POST(req) {
   const connLabels = declared.filter((s2) => s2.connected).map((s2) => s2.label);
   const offLabels = declared.filter((s2) => !s2.connected).map((s2) => s2.label);
 
-  const named = (providedContext ? null : (wss || []).find((w) => w.name && allUserText.includes(w.name.toLowerCase())));
+  // focus mode: lock the whole answer to one client (used on a client's service page)
+  const focusId = body?.focusWorkspaceId || null;
+  const focusSvc = body?.serviceKey || null;
+  let focusWs = null;
+  if (focusId && !providedContext) {
+    let allowed = !!prof?.is_super_admin;
+    if (!allowed) { const { data: mem } = await db.from("memberships").select("id").eq("profile_id", user.id).eq("workspace_id", focusId).maybeSingle(); allowed = !!mem; }
+    if (!allowed) return Response.json({ error: "Not allowed for this client." }, { status: 403 });
+    const { data: fw } = await db.from("workspaces").select("id,name,website").eq("id", focusId).single();
+    focusWs = fw || null;
+  }
+
+  const named = focusWs || (providedContext ? null : (wss || []).find((w) => w.name && allUserText.includes(w.name.toLowerCase())));
   const focus = named ? [named] : (wss || []).slice(0, 4);
 
   const ah = [];
@@ -83,8 +95,11 @@ export async function POST(req) {
     }
   }
 
-  const { data: tasks } = providedContext ? { data: [] } : await db.from("tasks").select("title,status,workspace_id,updated_at,due_date").eq("assignee_id", user.id).limit(60);
-  const nameOf = (id) => { const w = (wss || []).find((x) => x.id === id); return w ? w.name : "(no client)"; };
+  const { data: tasks } = providedContext ? { data: [] }
+    : focusWs
+      ? await db.from("tasks").select("title,status,workspace_id,updated_at,due_date").eq("workspace_id", focusWs.id).limit(60)
+      : await db.from("tasks").select("title,status,workspace_id,updated_at,due_date").eq("assignee_id", user.id).limit(60);
+  const nameOf = (id) => { const w = (wss || []).find((x) => x.id === id) || (focusWs && focusWs.id === id ? focusWs : null); return w ? w.name : "(no client)"; };
   const taskLines = (tasks || []).map((t) => `- ${t.title} [${t.status}] client:${nameOf(t.workspace_id)}${t.due_date ? " due:" + t.due_date : ""}${t.updated_at ? " updated:" + String(t.updated_at).slice(0, 10) : ""}`);
 
   const ctx = providedContext || [
@@ -101,7 +116,8 @@ export async function POST(req) {
     "Requested but NOT connected (if asked for this data, say we don't have it because that source isn't connected yet): " + (offLabels.length ? offLabels.join(", ") : "(none)"),
   ].join("\n");
 
-  const SYS = `You are Ask Velvet, the assistant for a marketing agency's team, in an ongoing chat with a team member about their clients. Be conversational, warm and concise. Answer using ONLY the data below and the conversation so far. If a specific number or fact is not present, say you don't have that data rather than guessing, and offer what you can. If a request is ambiguous, ask a short clarifying question. Never invent metrics, dates, or trends. Today is ${new Date().toISOString().slice(0, 10)}.
+  const focusNote = focusWs ? `FOCUS: You are focused ONLY on the client "${focusWs.name}"${focusSvc ? " for the " + focusSvc + " service" : ""}. Only discuss this client. If asked about a different client, reply that you can only discuss this client on this page.\n\n` : "";
+  const SYS = focusNote + `You are Ask Velvet, the assistant for a marketing agency's team, in an ongoing chat with a team member about their clients. Be conversational, warm and concise. Answer using ONLY the data below and the conversation so far. If a specific number or fact is not present, say you don't have that data rather than guessing, and offer what you can. If a request is ambiguous, ask a short clarifying question. Never invent metrics, dates, or trends. Today is ${new Date().toISOString().slice(0, 10)}.
 
 HOW THIS DEPARTMENT WANTS ANSWERS (follow this style):
 ${styleBlock}

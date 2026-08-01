@@ -8,6 +8,7 @@ import Modal from "../../components/Modal";
 import { departmentsForRole, DEPARTMENTS } from "../../lib/agencyNav";
 import AgencyNav from "../../components/AgencyNav";
 import AddTask from "../../components/AddTask";
+import AskVelvet from "../../components/AskVelvet";
 
 const HEALTH = { healthy: { label: "Healthy", bg: "#E4F6EC", fg: "#177E4E" }, watch: { label: "To watch", bg: "#FDEBD3", fg: "#B4640C" }, risk: { label: "At risk", bg: "#FBEAE6", fg: "#C0392B" } };
 const DEPT_COLOR = { Performance: "#C0392B", Content: "#7C3AED", Analytics: "#1E7F5C" };
@@ -46,11 +47,6 @@ export default function Dashboard() {
   const [myTab, setMyTab] = useState("this_week");
   const [showAdd, setShowAdd] = useState(false);
   const [cardFilter, setCardFilter] = useState(null);
-  const [askInput, setAskInput] = useState("");
-  const [askThread, setAskThread] = useState([]);
-  const [askContext, setAskContext] = useState("");
-  const [askBusy, setAskBusy] = useState(false);
-  const [askErr, setAskErr] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -219,20 +215,6 @@ export default function Dashboard() {
         <div style={{ fontSize: 26, fontWeight: 700, color: numColor || "var(--text)" }}>{n}</div>
       </div>
     );
-    const askVelvet = async (q) => {
-      const text = (q ?? askInput).trim(); if (!text || askBusy) return;
-      const thread = [...askThread, { role: "user", content: text }];
-      setAskThread(thread); setAskInput(""); setAskBusy(true); setAskErr("");
-      try {
-        const { data: sess } = await supabase.auth.getSession();
-        const res = await fetch("/api/ask-velvet", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${sess.session?.access_token}` }, body: JSON.stringify({ messages: thread, context: askContext || undefined }) });
-        const j = await res.json(); setAskBusy(false);
-        if (!res.ok) { setAskErr(j.error || "Ask Velvet couldn't answer."); return; }
-        setAskThread([...thread, { role: "assistant", content: j.answer || "No answer." }]);
-        if (j.context) setAskContext(j.context);
-      } catch (e) { setAskBusy(false); setAskErr("Ask Velvet error: " + (e?.message || String(e))); }
-    };
-    const askReset = () => { setAskThread([]); setAskContext(""); setAskErr(""); setAskInput(""); };
 
     return (
       <Shell profile={profile} roleLabel={roleLabel} nav={nav}>
@@ -243,38 +225,7 @@ export default function Dashboard() {
         </div>
 
         {/* Ask Velvet, docked at the top */}
-        <div style={{ background: "#0B0D12", borderRadius: 14, padding: 16, marginBottom: 14, color: "#fff" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <b style={{ fontSize: 15 }}>✨ Ask Velvet</b>
-            <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              {askThread.length > 0 && <span onClick={askReset} style={{ fontSize: 12, color: "#9AA3B2", cursor: "pointer" }}>New chat</span>}
-              <span style={{ fontSize: 11, color: "#9AA3B2", border: "0.5px solid #2A3550", borderRadius: 20, padding: "2px 10px" }}>agency only</span>
-            </span>
-          </div>
-
-          {askThread.length === 0 && (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-              <button onClick={() => askVelvet(`How is ${topClient} doing vs competitors?`)} disabled={askBusy} style={{ background: "var(--gold,#F7C948)", color: "#0B0D12", border: "none", borderRadius: 20, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>How is {topClient} doing vs competitors?</button>
-              <button onClick={() => askVelvet("Summarise this week's SEO wins")} disabled={askBusy} style={{ background: "transparent", color: "#E7EAF0", border: "0.5px solid #2A3550", borderRadius: 20, padding: "7px 14px", fontSize: 13, cursor: "pointer" }}>Summarise this week's SEO wins</button>
-            </div>
-          )}
-
-          {askThread.length > 0 && (
-            <div style={{ maxHeight: 340, overflowY: "auto", marginBottom: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-              {askThread.map((m, i) => (
-                <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%", background: m.role === "user" ? "var(--gold,#F7C948)" : "#15181F", color: m.role === "user" ? "#0B0D12" : "#E7EAF0", border: m.role === "user" ? "none" : "0.5px solid #2A3550", borderRadius: 12, padding: "9px 13px", fontSize: 13.5, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{m.content}</div>
-              ))}
-              {askBusy && <div style={{ alignSelf: "flex-start", color: "#9AA3B2", fontSize: 12, padding: "4px 2px" }}>Ask Velvet is reading the latest data…</div>}
-            </div>
-          )}
-          {askThread.length === 0 && askBusy && <div style={{ fontSize: 12, color: "#9AA3B2", marginBottom: 10 }}>Ask Velvet is reading the latest data…</div>}
-
-          <div style={{ display: "flex", gap: 8 }}>
-            <input value={askInput} onChange={(e) => setAskInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") askVelvet(); }} placeholder={askThread.length ? "Reply…" : "Ask about any client's performance…"} style={{ flex: 1, background: "#15181F", border: "0.5px solid #2A3550", borderRadius: 10, padding: "11px 14px", color: "#fff", fontSize: 14 }} />
-            <button onClick={() => askVelvet()} disabled={askBusy} style={{ background: "var(--gold,#F7C948)", color: "#0B0D12", border: "none", borderRadius: 10, padding: "0 16px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{askBusy ? "…" : "Ask"}</button>
-          </div>
-          {askErr && <div style={{ fontSize: 12, color: "#F2B4A3", marginTop: 10 }}>{askErr}</div>}
-        </div>
+        <AskVelvet suggestions={[`How is ${topClient} doing vs competitors?`, "Summarise this week's SEO wins"]} />
 
         {/* status view */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 12 }}>
