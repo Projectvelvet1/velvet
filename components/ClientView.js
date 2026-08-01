@@ -22,13 +22,6 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   const firstName = (profile?.full_name || profile?.email || workspace?.name || "there").split(" ")[0].split("@")[0];
   const answersPhase = isProspect ? "discovery" : "full";
   const onbHref = viewingAs ? `/onboarding?ws=${workspace.id}` : "/onboarding";
-  useEffect(() => {
-    if (viewingAs || !meId || !workspace?.id) return;
-    (async () => {
-      const { data } = await supabase.from("tasks").select("id,title,status,assignee_id,client_note,created_at,due_date,priority,frequency,description,deliverable_link,updated_at,share_with").eq("workspace_id", workspace.id).or(`assignee_id.eq.${meId},share_with.eq.client`).order("created_at", { ascending: false });
-      setMyTasks(data || []);
-    })();
-  }, [meId, workspace?.id, viewingAs]);
   const grouped = {}; services.forEach((s) => { (grouped[s.department] ||= []).push(s); });
 
   // ---- onboarding answers ----
@@ -43,6 +36,13 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   const [clientTab, setClientTab] = useState("home");
   const [myTasks, setMyTasks] = useState([]);
   const [openTask, setOpenTask] = useState(null);
+  useEffect(() => {
+    if (viewingAs || !meId || !workspace?.id) return;
+    (async () => {
+      const { data } = await supabase.from("tasks").select("id,title,status,assignee_id,client_note,created_at,due_date,priority,frequency,description,deliverable_link,updated_at,share_with").eq("workspace_id", workspace.id).or(`assignee_id.eq.${meId},share_with.eq.client`).order("created_at", { ascending: false });
+      setMyTasks(data || []);
+    })();
+  }, [meId, workspace?.id, viewingAs]);
   const [cvAgency, setCvAgency] = useState([]);
   const [cvClient, setCvClient] = useState([]);
   const [team, setTeam] = useState(null);
