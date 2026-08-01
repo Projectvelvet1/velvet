@@ -9,6 +9,7 @@ import { departmentsForRole, DEPARTMENTS } from "../../lib/agencyNav";
 import AgencyNav from "../../components/AgencyNav";
 import AddTask from "../../components/AddTask";
 import AskVelvet from "../../components/AskVelvet";
+import TaskDetail from "../../components/TaskDetail";
 
 const HEALTH = { healthy: { label: "Healthy", bg: "#E4F6EC", fg: "#177E4E" }, watch: { label: "To watch", bg: "#FDEBD3", fg: "#B4640C" }, risk: { label: "At risk", bg: "#FBEAE6", fg: "#C0392B" } };
 const DEPT_COLOR = { Performance: "#C0392B", Content: "#7C3AED", Analytics: "#1E7F5C" };
@@ -47,6 +48,7 @@ export default function Dashboard() {
   const [myTab, setMyTab] = useState("this_week");
   const [showAdd, setShowAdd] = useState(false);
   const [cardFilter, setCardFilter] = useState(null);
+  const [openTask, setOpenTask] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -89,7 +91,7 @@ export default function Dashboard() {
         const svcKeys = [...new Set((assignsMine || []).map((a) => a.service_key))];
         setMyServiceLine(svcKeys.map((k) => SVC_LABEL[k] || k).join(", "));
         // their tasks across all clients
-        const { data: mine } = await supabase.from("tasks").select("id,title,status,workspace_id,service_key,updated_at,due_date,priority").eq("assignee_id", uid).order("updated_at", { ascending: false });
+        const { data: mine } = await supabase.from("tasks").select("id,title,status,workspace_id,service_key,updated_at,due_date,priority,description,deliverable_link,frequency,client_note,assignee_id").eq("assignee_id", uid).order("updated_at", { ascending: false });
         const rows = (mine || []).map((t) => ({ ...t, client: nameOf(t.workspace_id) }));
         setMyTasks(rows);
         const now = new Date(); const mKey = now.getFullYear() + "-" + now.getMonth();
@@ -206,7 +208,7 @@ export default function Dashboard() {
       open: { label: "Open tasks", fn: (t) => ["todo", "in_progress", "needs_look"].includes(t.status) },
       dueWeek: { label: "Due this week", fn: (t) => ["todo","in_progress","needs_look"].includes(t.status) && t.due_date && t.due_date >= wa && t.due_date <= wb },
       overdue: { label: "Overdue", fn: (t) => ["todo","in_progress","needs_look"].includes(t.status) && t.due_date && t.due_date < today },
-      unassigned: { label: "Unassigned (no due date or no client)", fn: (t) => ["todo","in_progress","needs_look"].includes(t.status) && (!t.due_date || !t.workspace_id) },
+      assigned: { label: "Tasks assigned to me", fn: () => true },
     };
     const filtered = cardFilter && FILTERS[cardFilter] ? myTasks.filter(FILTERS[cardFilter].fn) : [];
     const card = (label, n, fkey, numColor) => (
@@ -226,6 +228,7 @@ export default function Dashboard() {
 
         {/* Ask Velvet, docked at the top */}
         <AskVelvet suggestions={[`How is ${topClient} doing vs competitors?`, "Summarise this week's SEO wins"]} />
+        {openTask && <TaskDetail task={openTask} onClose={() => setOpenTask(null)} />}
 
         {/* status view */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 12 }}>
@@ -240,7 +243,7 @@ export default function Dashboard() {
           {card("Open tasks", openT.length, "open")}
           {card("Due this week", cDueWeek, "dueWeek", cDueWeek ? "#9A6B00" : null)}
           {card("Overdue", cOverdue, "overdue", cOverdue ? "#C0392B" : null)}
-          {card("Unassigned tasks", cUnassigned, "unassigned", cUnassigned ? "#7C3AED" : null)}
+          {card("Tasks assigned to me", myTasks.length, "assigned", myTasks.length ? "#2557C7" : null)}
         </div>
 
         {cardFilter && (
@@ -256,7 +259,7 @@ export default function Dashboard() {
                     <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 1 }}>{t.workspace_id ? t.client : "Personal"}{t.status === "delivered" ? " · submitted " + new Date(t.updated_at).toLocaleDateString() : (t.due_date ? " · due " + t.due_date : "")}</div></div>
                   <span style={{ display: "flex", gap: 6, alignItems: "center", flex: "none" }}>
                     <span className="pill" style={{ background: pill.bg, color: pill.fg }}>{pill.l}</span>
-                    {t.workspace_id && <button className="btn btn-ghost" onClick={() => router.push(`/client/${t.workspace_id}/service/${t.service_key}`)}>Open</button>}
+                    <button className="btn btn-ghost" onClick={() => setOpenTask(t)}>Open</button>
                   </span>
                 </div>); })}
           </div>
@@ -275,7 +278,7 @@ export default function Dashboard() {
                 <div style={{ display: "flex", gap: 6, alignItems: "center", flex: "none" }}>
                   <span className="pill" style={{ background: pm.bg, color: pm.fg }}>{pm.l}</span>
                   <span className="pill" style={{ background: overdue ? "#FBEAE6" : pill.bg, color: overdue ? "#C0392B" : pill.fg }}>{overdue ? "Overdue" : pill.l}</span>
-                  {t.workspace_id && <button className="btn btn-ghost" onClick={() => router.push(`/client/${t.workspace_id}/service/${t.service_key}`)}>Open</button>}
+                  <button className="btn btn-ghost" onClick={() => setOpenTask(t)}>Open</button>
                 </div></div>); })}</div>}
 
         {/* What needs attention */}
