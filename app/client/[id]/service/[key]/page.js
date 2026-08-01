@@ -45,6 +45,7 @@ export default function ClientServiceDashboard() {
   const [ws, setWs] = useState(null);
   const [members, setMembers] = useState([]);
   const [member, setMember] = useState(null);
+  const [taskMember, setTaskMember] = useState(null); // filter task list by assignee
   const [comps, setComps] = useState([]);
   const [newComp, setNewComp] = useState("");
   const [showCompare, setShowCompare] = useState(false);
@@ -165,12 +166,17 @@ export default function ClientServiceDashboard() {
 
       {!isClient && (
       <div className="card">
-        <div style={{ fontSize: 11, color: "var(--faint)", marginBottom: 8 }}>{svc?.label} team on this client — click to see their current work</div>
+        <div style={{ fontSize: 11, color: "var(--faint)", marginBottom: 8 }}>{svc?.label} team on this client — filter the tasks below by member</div>
         {members.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>No one assigned to this service yet.</div>
           : <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {members.map((m) => (
-                <button key={m.id} className="pill" style={{ border: "0.5px solid var(--line)", cursor: "pointer" }} onClick={() => setMember(m)}>{(m.full_name || m.email)} →</button>
-              ))}
+              <button className="pill" style={{ border: "0.5px solid var(--line)", cursor: "pointer", background: !taskMember ? "#0B0D12" : "var(--paper)", color: !taskMember ? "#fff" : "var(--text)" }} onClick={() => setTaskMember(null)}>All ({tasks.length})</button>
+              {members.map((m) => {
+                const n = tasks.filter((t) => t.assignee_id === m.id).length;
+                const on = taskMember === m.id;
+                return (
+                  <button key={m.id} className="pill" style={{ border: "0.5px solid var(--line)", cursor: "pointer", background: on ? "var(--gold,#F7C948)" : "var(--paper)", color: on ? "#0B0D12" : "var(--text)", fontWeight: on ? 600 : 400 }} onClick={() => setTaskMember(on ? null : m.id)}>{(m.full_name || m.email)} ({n})</button>
+                );
+              })}
             </div>}
       </div>
       )}
@@ -264,7 +270,8 @@ export default function ClientServiceDashboard() {
 
         {(() => {
           const b = tabBounds(taskTab, qYear, qQuarter);
-          const list = b ? tasks.filter((t) => t.due_date && t.due_date >= b[0] && t.due_date <= b[1]) : tasks;
+          let list = b ? tasks.filter((t) => t.due_date && t.due_date >= b[0] && t.due_date <= b[1]) : tasks;
+          if (taskMember) list = list.filter((t) => t.assignee_id === taskMember);
           if (list.length === 0) return <div style={{ fontSize: 13, color: "var(--faint)" }}>{b ? "No tasks with a due date in this period." : "No tasks yet."}</div>;
           return list.map((t) => {
             const st = STATUS[t.status] || STATUS.todo;
@@ -296,20 +303,6 @@ export default function ClientServiceDashboard() {
         <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 6 }}>The client's brand documents arrive with the document library (a later build).</div>
       </div>
 
-      {member && (
-        <Modal title={`${member.full_name || member.email} — current work`} onClose={() => setMember(null)}>
-          <div className="empty" style={{ marginBottom: 10 }}>What {(member.full_name || member.email).split(" ")[0]} is working on for {ws?.name}.</div>
-          {(() => {
-            const theirs = tasks.filter((t) => t.assignee_id === member.id);
-            if (theirs.length === 0) return <div style={{ fontSize: 13, color: "var(--faint)" }}>No tasks assigned to them yet.</div>;
-            return theirs.map((t) => {
-              const st = STATUS[t.status] || STATUS.todo;
-              return (<div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderTop: "0.5px solid var(--line)" }}>
-                <span style={{ fontSize: 13 }}>{t.title}</span><span className="pill" style={{ background: st.bg, color: st.fg }}>{st.label}</span></div>);
-            });
-          })()}
-        </Modal>
-      )}
 
       {showAdd && <AddTask me={uid} fixedClient={{ id, name: ws?.name }} defaultServiceKey={key} onClose={() => setShowAdd(false)} onCreated={loadTasks} />}
       {showAssign && <AssignTask me={uid} client={{ id, name: ws?.name }} serviceKey={key} agencyPeople={agencyPeople} clientPeople={clientPeople} onClose={() => setShowAssign(false)} onCreated={loadTasks} />}
