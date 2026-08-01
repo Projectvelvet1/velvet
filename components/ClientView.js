@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Shell from "./Shell";
 import Modal from "./Modal";
+import TaskDetail from "./TaskDetail";
 import AssignTask from "./AssignTask";
 import { loadQuestions } from "../lib/onboardingQuestions";
 import { supabase } from "../lib/supabase";
@@ -21,6 +22,13 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   const firstName = (profile?.full_name || profile?.email || workspace?.name || "there").split(" ")[0].split("@")[0];
   const answersPhase = isProspect ? "discovery" : "full";
   const onbHref = viewingAs ? `/onboarding?ws=${workspace.id}` : "/onboarding";
+  useEffect(() => {
+    if (viewingAs || !meId || !workspace?.id) return;
+    (async () => {
+      const { data } = await supabase.from("tasks").select("id,title,status,assignee_id,client_note,created_at,due_date,priority,frequency,description,deliverable_link,updated_at,share_with").eq("workspace_id", workspace.id).or(`assignee_id.eq.${meId},share_with.eq.client`).order("created_at", { ascending: false });
+      setMyTasks(data || []);
+    })();
+  }, [meId, workspace?.id, viewingAs]);
   const grouped = {}; services.forEach((s) => { (grouped[s.department] ||= []).push(s); });
 
   // ---- onboarding answers ----
@@ -33,6 +41,8 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   const [meId, setMeId] = useState(null);
   const [showAssign, setShowAssign] = useState(false);
   const [clientTab, setClientTab] = useState("home");
+  const [myTasks, setMyTasks] = useState([]);
+  const [openTask, setOpenTask] = useState(null);
   const [cvAgency, setCvAgency] = useState([]);
   const [cvClient, setCvClient] = useState([]);
   const [team, setTeam] = useState(null);
@@ -290,6 +300,7 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   return (
     <Shell profile={shellProfile} roleLabel={viewingAs ? "Client view" : "Client"} nav={nav} banner={banner} footer={footer}>
       {assignModal}
+      {openTask && <TaskDetail task={openTask} onClose={() => setOpenTask(null)} />}
       <div className="page-head">
         <h1 style={{ fontSize: 24 }}>{viewingAs ? wsLocal.name : `Welcome, ${firstName}`}</h1>
         <span className="pill p-client">{isProspect ? "Discovery" : "Client"}</span>
@@ -371,7 +382,7 @@ export default function ClientView({ workspace, services = [], profile, viewingA
       ) : (
         <>
           <div style={{ display: "flex", gap: 4, background: "var(--cloud,#F5F6F8)", padding: 4, borderRadius: 10, width: "fit-content", marginBottom: 14 }}>
-            {[["home", "Home"], ["settings", "Settings"]].map(([v, l]) => (
+            {[["home", "Home"], ["tasks", "Tasks"], ["settings", "Settings"]].map(([v, l]) => (
               <button key={v} onClick={() => setClientTab(v)} className="btn" style={{ padding: "6px 16px", fontSize: 13, background: clientTab === v ? "#fff" : "transparent", boxShadow: clientTab === v ? "0 1px 2px rgba(0,0,0,.06)" : "none", color: clientTab === v ? "var(--text)" : "var(--muted)" }}>{l}</button>
             ))}
           </div>
@@ -386,6 +397,20 @@ export default function ClientView({ workspace, services = [], profile, viewingA
                   <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 3 }}>{s.people && s.people.length ? "Your agency team: " + s.people.map((x) => x.name).join(", ") : "Team being assigned"}</div>
                 </div>
               ))}
+            </>
+          ) : clientTab === "tasks" ? (
+            <>
+              <h3 style={{ fontSize: 16, margin: "6px 0 10px" }}>Your tasks</h3>
+              <div className="card">
+                <div style={{ fontSize: 12, color: "var(--faint)", marginBottom: 8 }}>Tasks the agency has assigned to you or shared with your team.</div>
+                {myTasks.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>Nothing assigned to you yet.</div>
+                  : myTasks.map((t) => (
+                      <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 0", borderTop: "0.5px solid var(--line)" }}>
+                        <div style={{ minWidth: 0 }}><div style={{ fontSize: 13 }}>{t.title}</div><div style={{ fontSize: 11, color: "var(--faint)", marginTop: 1 }}>{t.due_date ? "due " + t.due_date : "no due date"}</div></div>
+                        <button className="btn btn-ghost" style={{ padding: "4px 10px", flex: "none" }} onClick={() => setOpenTask(t)}>Open</button>
+                      </div>
+                    ))}
+              </div>
             </>
           ) : (
             <>

@@ -8,6 +8,7 @@ import Modal from "../../../../../components/Modal";
 import AddTask from "../../../../../components/AddTask";
 import AssignTask from "../../../../../components/AssignTask";
 import AskVelvet from "../../../../../components/AskVelvet";
+import TaskDetail from "../../../../../components/TaskDetail";
 import { loadAgencyDepts, DEPARTMENTS } from "../../../../../lib/agencyNav";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ export default function ClientServiceDashboard() {
   const [members, setMembers] = useState([]);
   const [member, setMember] = useState(null);
   const [taskMember, setTaskMember] = useState(null); // filter task list by assignee
+  const [openTask, setOpenTask] = useState(null);
   const [comps, setComps] = useState([]);
   const [newComp, setNewComp] = useState("");
   const [showCompare, setShowCompare] = useState(false);
@@ -176,7 +178,7 @@ export default function ClientServiceDashboard() {
   useEffect(() => { if (ws?.website) loadTrend(); /* eslint-disable-next-line */ }, [trendWin, ws?.website]);
 
   async function loadTasks() {
-    const { data } = await supabase.from("tasks").select("id,title,status,assignee_id,client_note,created_at,due_date,priority,updated_at").eq("workspace_id", id).in("service_key", [key, "general"]).order("created_at", { ascending: true });
+    const { data } = await supabase.from("tasks").select("id,title,status,assignee_id,client_note,created_at,due_date,priority,frequency,description,deliverable_link,updated_at").eq("workspace_id", id).in("service_key", [key, "general"]).order("created_at", { ascending: true });
     setTasks(data || []);
   }
   async function addTask(e) {
@@ -376,6 +378,7 @@ export default function ClientServiceDashboard() {
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
                   <span className="pill" style={{ background: st.bg, color: st.fg }}>{st.label}</span>
+                  <button className="btn btn-ghost" style={{ padding: "4px 10px" }} onClick={() => setOpenTask(t)}>Open</button>
                   <select className="input" style={{ padding: "4px 8px", width: "auto" }} value={["todo","in_progress","delivered"].includes(t.status) ? t.status : ""} onChange={(e) => setStatus(t.id, e.target.value)}>
                     {!["todo","in_progress","delivered"].includes(t.status) && <option value="">move…</option>}
                     <option value="todo">To do</option>
@@ -420,6 +423,7 @@ export default function ClientServiceDashboard() {
       </div>
 
 
+      {openTask && <TaskDetail task={openTask} onClose={() => setOpenTask(null)} />}
       {showAdd && <AddTask me={uid} fixedClient={{ id, name: ws?.name }} defaultServiceKey={key} onClose={() => setShowAdd(false)} onCreated={loadTasks} />}
       {showAssign && <AssignTask me={uid} client={{ id, name: ws?.name }} serviceKey={key} agencyPeople={agencyPeople} clientPeople={clientPeople} onClose={() => setShowAssign(false)} onCreated={loadTasks} />}
 
