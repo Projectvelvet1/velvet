@@ -149,7 +149,7 @@ export default function ClientServiceDashboard() {
       const H = { Authorization: `Bearer ${sess.session?.access_token}` };
       const r = await fetch(`/api/ahrefs?kind=history&grouping=${grouping}&date_from=${date_from}&target=${encodeURIComponent(ws.website)}`, { headers: H });
       const j = await r.json(); setTrendBusy(false);
-      if (!j.ok) { setTrendErr(j.message || "Couldn't load the trend."); setTrendSeries([]); return; }
+      if (!j.ok) { setTrendErr("Trend source said: " + String(j.message || j.error || "no response").slice(0, 140)); setTrendSeries([]); return; }
       let pts = (j.series || []).map((x) => ({ label: x.date, traffic: x.org_traffic, keywords: x.org_keywords }));
       if (trendWin === "quarterly") pts = bucketQuarters(pts);
       setTrendSeries(pts);
@@ -235,31 +235,26 @@ export default function ClientServiceDashboard() {
       </div>
       )}
 
-      <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600, margin: "16px 0 8px" }}>{isSeo ? "Search performance" : (svc?.label + " performance")} <span className="pill p-agency" style={{ marginLeft: 4 }}>demo · GSC</span></div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
-        {(isSeo ? [["Clicks","4,820","↑ 12.4%","#177E4E"],["Impressions","138k","↓ 3.1%","#C0392B"],["Avg position","14.2","↑ 1.8","#177E4E"],["CTR","3.5%","↑ 0.4pt","#177E4E"]]
-                : [["Metric A","—","",""],["Metric B","—","",""],["Metric C","—","",""],["Metric D","—","",""]]).map(([k, v, d, c]) => (
-          <div className="card" key={k} style={{ margin: 0 }}><div style={{ fontSize: 11, color: "var(--faint)" }}>{k}</div><div style={{ fontSize: 20, fontWeight: 600 }}>{v}</div>{d && <div style={{ fontSize: 11, fontWeight: 600, color: c }}>{d}</div>}</div>
-        ))}
+      <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600, margin: "16px 0 8px" }}>{isSeo ? "Search performance" : (svc?.label + " performance")} <span className="pill p-agency" style={{ marginLeft: 4 }}>connect GSC</span></div>
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 13, color: "var(--muted)" }}>Clicks, impressions, average position and CTR come from Google Search Console. Connect this client's Search Console property to see real numbers here.</div>
       </div>
 
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <b>Traffic overview</b>
-          <span className="pill p-agency">{ahrefs?.ok ? "live · Ahrefs" : "demo · Ahrefs"}</span>
+          <span className="pill p-agency">{ahrefs?.ok ? "live · Ahrefs" : "no data"}</span>
         </div>
         {(() => {
           const fmt = (n) => (n == null ? "—" : n >= 1000000 ? (n / 1000000).toFixed(1) + "m" : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n));
-          const live = ahrefs?.ok;
-          const cells = live
-            ? [["Organic traffic", fmt(ahrefs.org_traffic)], ["Organic keywords", fmt(ahrefs.org_keywords)], ["Domain Rating (DR)", ahrefs.domain_rating != null ? Math.round(ahrefs.domain_rating) : "—"], ["Total backlinks", fmt(ahrefs.backlinks)]]
-            : [["Organic traffic", "128k"], ["Organic keywords", "1,240"], ["Domain Rating (DR)", "62"], ["Total backlinks", "64k"]];
-          return (<>
+          if (!ahrefs) return <div style={{ fontSize: 13, color: "var(--faint)" }}>Loading Ahrefs…</div>;
+          if (!ahrefs.ok) return <div style={{ fontSize: 13, color: "var(--faint)" }}>{ahrefs.error === "no_target" ? "Add this client's website in their details to pull live Ahrefs data." : ahrefs.error === "no_key" ? "Ahrefs API key is missing." : "Couldn't reach Ahrefs right now."}</div>;
+          const cells = [["Organic traffic", fmt(ahrefs.org_traffic)], ["Organic keywords", fmt(ahrefs.org_keywords)], ["Domain Rating (DR)", ahrefs.domain_rating != null ? Math.round(ahrefs.domain_rating) : "—"], ["Total backlinks", fmt(ahrefs.backlinks)]];
+          return (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
               {cells.map(([k, v]) => (<div key={k} style={{ background: "var(--cloud,#F5F6F8)", borderRadius: 10, padding: 10 }}><div style={{ fontSize: 11, color: "var(--faint)" }}>{k}</div><div style={{ fontSize: 18, fontWeight: 600 }}>{v}</div></div>))}
             </div>
-            {ahrefs && !ahrefs.ok && <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 8 }}>{ahrefs.error === "no_key" ? "Showing sample data — add AHREFS_API_KEY to go live." : ahrefs.error === "no_target" ? "Add this client's website to pull live data." : "Couldn't reach Ahrefs — showing sample data."}</div>}
-          </>);
+          );
         })()}
       </div>
 
@@ -310,14 +305,14 @@ export default function ClientServiceDashboard() {
       {isSeo && (() => {
         const fmt = (n) => (n == null ? "—" : n >= 1000000 ? (n / 1000000).toFixed(1) + "m" : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n));
         const kwLive = kw?.ok, pgLive = topPages?.ok;
-        const kwRows = kwLive ? kw.keywords.map((k) => [k.keyword, fmt(k.traffic)]) : [["betika login","1,290"],["betika app","870"],["aviator betika","540"],["betika jackpot","410"],["betika bonus","300"]];
-        const pgRows = pgLive ? topPages.pages.map((x) => { let u = x.url || ""; try { u = new URL(x.url).pathname || x.url; } catch {} return [u, fmt(x.traffic)]; }) : [["/login","1,540"],["/aviator","910"],["/promotions","620"],["/jackpot","480"],["/casino","360"]];
+        const kwRows = kwLive ? kw.keywords.map((k) => [k.keyword, fmt(k.traffic)]) : [];
+        const pgRows = pgLive ? topPages.pages.map((x) => { let u = x.url || ""; try { u = new URL(x.url).pathname || x.url; } catch {} return [u, fmt(x.traffic)]; }) : [];
         return (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
-          <div className="card" style={{ margin: 0 }}><b style={{ fontSize: 13 }}>Top 5 queries</b><span className="pill p-agency" style={{ marginLeft: 6 }}>{kwLive ? "live · Ahrefs" : "demo"}</span>
+          <div className="card" style={{ margin: 0 }}><b style={{ fontSize: 13 }}>Top 5 queries</b><span className="pill p-agency" style={{ marginLeft: 6 }}>{kwLive ? "live · Ahrefs" : "no data"}</span>
             <div style={{ marginTop: 8, fontSize: 12 }}>{kwRows.length === 0 ? <div style={{ color: "var(--faint)" }}>No keyword data.</div> : kwRows.map(([q, n], i) => (
               <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderTop: "0.5px solid var(--line)" }}><span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{q}</span><span style={{ color: "var(--faint)", flex: "none", marginLeft: 8 }}>{n}</span></div>))}</div></div>
-          <div className="card" style={{ margin: 0 }}><b style={{ fontSize: 13 }}>Top 5 pages</b><span className="pill p-agency" style={{ marginLeft: 6 }}>{pgLive ? "live · Ahrefs" : "demo"}</span>
+          <div className="card" style={{ margin: 0 }}><b style={{ fontSize: 13 }}>Top 5 pages</b><span className="pill p-agency" style={{ marginLeft: 6 }}>{pgLive ? "live · Ahrefs" : "no data"}</span>
             <div style={{ marginTop: 8, fontSize: 12 }}>{pgRows.length === 0 ? <div style={{ color: "var(--faint)" }}>No page data.</div> : pgRows.map(([q, n], i) => (
               <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderTop: "0.5px solid var(--line)" }}><span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{q}</span><span style={{ color: "var(--faint)", flex: "none", marginLeft: 8 }}>{n}</span></div>))}</div></div>
         </div>);
@@ -339,7 +334,6 @@ export default function ClientServiceDashboard() {
         <button className="btn btn-primary" style={{ width: "100%" }} onClick={openCompare} disabled={comps.length === 0}>Compare organic traffic, keywords &amp; backlinks</button>
       </div>
 
-      <div className="empty" style={{ marginTop: 14 }}>The live {svc?.label || "service"} numbers, LLM visibility and the comparison connect to real Ahrefs / GSC data in a later step. This frame is on demo data; the competitors list above is real.</div>
 
       <div className="card" style={{ marginTop: 12 }}>
         <b>{svc?.label} tasks for {ws?.name}</b>
