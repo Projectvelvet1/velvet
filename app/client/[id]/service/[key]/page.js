@@ -68,6 +68,7 @@ export default function ClientServiceDashboard() {
   const [gscReason, setGscReason] = useState("");
   const [gscPickSel, setGscPickSel] = useState("");
   const [gscBusy, setGscBusy] = useState(false);
+  const [hoverIdx, setHoverIdx] = useState(null);
   const [gscSitesErr, setGscSitesErr] = useState("");
   const [docName, setDocName] = useState("");
   const [docUrl, setDocUrl] = useState("");
@@ -149,8 +150,7 @@ export default function ClientServiceDashboard() {
     if (!ws?.website) { setTrendSeries([]); return; }
     setTrendBusy(true); setTrendErr("");
     const d = new Date(); let grouping = "monthly";
-    if (trendWin === "weekly") { grouping = "weekly"; d.setDate(d.getDate() - 7 * 13); }
-    else if (trendWin === "quarterly") { d.setMonth(d.getMonth() - 24); }
+    if (trendWin === "quarterly") { d.setMonth(d.getMonth() - 24); }
     else if (trendWin === "6m") { d.setMonth(d.getMonth() - 6); }
     else { d.setMonth(d.getMonth() - 12); }
     const date_from = d.toISOString().slice(0, 10);
@@ -168,12 +168,10 @@ export default function ClientServiceDashboard() {
   function bucketClicks(series, win) {
     if (!series || !series.length) return [];
     const from = new Date();
-    if (win === "weekly") from.setDate(from.getDate() - 7 * 13);
-    else if (win === "6m") from.setMonth(from.getMonth() - 6);
+    if (win === "6m") from.setMonth(from.getMonth() - 6);
     else if (win === "quarterly") from.setMonth(from.getMonth() - 24);
     else from.setMonth(from.getMonth() - 12);
     const keyOf = (d) => { const dt = new Date(d);
-      if (win === "weekly") { const j = new Date(dt.getFullYear(), 0, 1); const wk = Math.ceil((((dt - j) / 86400000) + j.getDay() + 1) / 7); return dt.getFullYear() + "-W" + wk; }
       if (win === "quarterly") return dt.getFullYear() + "-Q" + (Math.floor(dt.getMonth() / 3) + 1);
       return dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0"); };
     const m = {};
@@ -183,20 +181,23 @@ export default function ClientServiceDashboard() {
   function trendChart(series, valKey) {
     const vals = series.map((p) => Number(p[valKey]) || 0);
     const max = Math.max(...vals, 1);
-    const last = vals[vals.length - 1], prev = vals[vals.length - 2];
-    const pct = (prev && prev > 0) ? Math.round(((last - prev) / prev) * 100) : null;
-    const fmt = (l) => { if (String(l).includes("W")) return "W" + String(l).split("W")[1]; if (String(l).includes("Q")) return l; const dt = new Date(l); return isNaN(dt) ? l : dt.toLocaleString("en", { month: "short" }) + " " + String(dt.getFullYear()).slice(2); };
+    const idx = (hoverIdx != null && hoverIdx >= 0 && hoverIdx < series.length) ? hoverIdx : series.length - 1;
+    const cur = vals[idx], prev = vals[idx - 1];
+    const pct = (prev && prev > 0) ? Math.round(((cur - prev) / prev) * 100) : null;
+    const periodWord = trendWin === "quarterly" ? "quarter" : trendWin === "1y" ? "year" : "month";
+    const fmt = (l) => { if (String(l).includes("Q")) return l; const dt = new Date(l); return isNaN(dt) ? l : dt.toLocaleString("en", { month: "short" }) + " " + String(dt.getFullYear()).slice(2); };
     return (
       <>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12 }}>
-          <span style={{ fontSize: 26, fontWeight: 700 }}>{last.toLocaleString()}</span>
-          {pct != null && <span style={{ fontSize: 13, color: pct >= 0 ? "#177E4E" : "var(--danger)" }}>{pct >= 0 ? "▲" : "▼"} {Math.abs(pct)}% vs previous</span>}
+          <span style={{ fontSize: 26, fontWeight: 700 }}>{cur.toLocaleString()}</span>
+          <span style={{ fontSize: 12, color: "var(--faint)" }}>{fmt(series[idx]?.label)}</span>
+          {pct != null && <span style={{ fontSize: 13, color: pct >= 0 ? "#177E4E" : "var(--danger)" }}>{pct >= 0 ? "▲" : "▼"} {Math.abs(pct)}% vs previous {periodWord}</span>}
         </div>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 130 }}>
-          {series.map((p, i) => { const v = Number(p[valKey]) || 0; const h = Math.max(4, Math.round((v / max) * 110)); const isLast = i === series.length - 1; return (
-            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }} title={v.toLocaleString()}>
-              <div style={{ width: "100%", height: h, background: isLast ? "#2557C7" : "var(--line)", borderRadius: "6px 6px 0 0" }} />
-              <span style={{ fontSize: 10, color: "var(--faint)", whiteSpace: "nowrap" }}>{fmt(p.label)}</span>
+          {series.map((p, i) => { const v = Number(p[valKey]) || 0; const h = Math.max(4, Math.round((v / max) * 110)); const active = i === idx; return (
+            <div key={i} onMouseEnter={() => setHoverIdx(i)} onMouseLeave={() => setHoverIdx(null)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, cursor: "pointer" }} title={v.toLocaleString()}>
+              <div style={{ width: "100%", height: h, background: active ? "#2557C7" : "var(--line)", borderRadius: "6px 6px 0 0", transition: "background .12s" }} />
+              <span style={{ fontSize: 10, color: active ? "var(--text)" : "var(--faint)", whiteSpace: "nowrap" }}>{fmt(p.label)}</span>
             </div>
           ); })}
         </div>
@@ -358,7 +359,7 @@ export default function ClientServiceDashboard() {
           </span>
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-          {[["weekly", "Weekly"], ["monthly", "Monthly"], ["quarterly", "Quarterly"], ["6m", "6 months"], ["1y", "1 year"]].map(([k, l]) => (
+          {[["monthly", "Monthly"], ["quarterly", "Quarterly"], ["6m", "6 months"], ["1y", "1 year"]].map(([k, l]) => (
             <span key={k} onClick={() => setTrendWin(k)} style={{ fontSize: 13, cursor: "pointer", padding: "5px 12px", borderRadius: 20, background: trendWin === k ? "#2557C7" : "var(--paper)", color: trendWin === k ? "#fff" : "var(--muted)", border: "0.5px solid var(--line)" }}>{l}</span>
           ))}
         </div>
