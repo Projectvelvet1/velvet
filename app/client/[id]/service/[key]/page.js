@@ -61,6 +61,13 @@ export default function ClientServiceDashboard() {
   const [trendSeries, setTrendSeries] = useState([]);
   const [trendBusy, setTrendBusy] = useState(false);
   const [trendErr, setTrendErr] = useState("");
+  const [gscProp, setGscProp] = useState(null);
+  const [gscSites, setGscSites] = useState([]);
+  const [gscTotals, setGscTotals] = useState(null);
+  const [gscSeries, setGscSeries] = useState(null);
+  const [gscReason, setGscReason] = useState("");
+  const [gscPickSel, setGscPickSel] = useState("");
+  const [gscBusy, setGscBusy] = useState(false);
   const [docName, setDocName] = useState("");
   const [docUrl, setDocUrl] = useState("");
   const [docBusy, setDocBusy] = useState(false);
@@ -157,6 +164,63 @@ export default function ClientServiceDashboard() {
       setTrendSeries(pts);
     } catch (e) { setTrendBusy(false); setTrendErr("Couldn't load the trend."); setTrendSeries([]); }
   }
+  function bucketClicks(series, win) {
+    if (!series || !series.length) return [];
+    const from = new Date();
+    if (win === "weekly") from.setDate(from.getDate() - 7 * 13);
+    else if (win === "6m") from.setMonth(from.getMonth() - 6);
+    else if (win === "quarterly") from.setMonth(from.getMonth() - 24);
+    else from.setMonth(from.getMonth() - 12);
+    const keyOf = (d) => { const dt = new Date(d);
+      if (win === "weekly") { const j = new Date(dt.getFullYear(), 0, 1); const wk = Math.ceil((((dt - j) / 86400000) + j.getDay() + 1) / 7); return dt.getFullYear() + "-W" + wk; }
+      if (win === "quarterly") return dt.getFullYear() + "-Q" + (Math.floor(dt.getMonth() / 3) + 1);
+      return dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0"); };
+    const m = {};
+    series.filter((x) => new Date(x.date) >= from).forEach((x) => { const k = keyOf(x.date); if (!m[k]) m[k] = { label: k, clicks: 0 }; m[k].clicks += (x.clicks || 0); });
+    return Object.values(m);
+  }
+  function trendChart(series, valKey) {
+    const vals = series.map((p) => Number(p[valKey]) || 0);
+    const max = Math.max(...vals, 1);
+    const last = vals[vals.length - 1], prev = vals[vals.length - 2];
+    const pct = (prev && prev > 0) ? Math.round(((last - prev) / prev) * 100) : null;
+    const fmt = (l) => { if (String(l).includes("W")) return "W" + String(l).split("W")[1]; if (String(l).includes("Q")) return l; const dt = new Date(l); return isNaN(dt) ? l : dt.toLocaleString("en", { month: "short" }) + " " + String(dt.getFullYear()).slice(2); };
+    return (
+      <>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12 }}>
+          <span style={{ fontSize: 26, fontWeight: 700 }}>{last.toLocaleString()}</span>
+          {pct != null && <span style={{ fontSize: 13, color: pct >= 0 ? "#177E4E" : "var(--danger)" }}>{pct >= 0 ? "▲" : "▼"} {Math.abs(pct)}% vs previous</span>}
+        </div>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 130 }}>
+          {series.map((p, i) => { const v = Number(p[valKey]) || 0; const h = Math.max(4, Math.round((v / max) * 110)); const isLast = i === series.length - 1; return (
+            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }} title={v.toLocaleString()}>
+              <div style={{ width: "100%", height: h, background: isLast ? "#2557C7" : "var(--line)", borderRadius: "6px 6px 0 0" }} />
+              <span style={{ fontSize: 10, color: "var(--faint)", whiteSpace: "nowrap" }}>{fmt(p.label)}</span>
+            </div>
+          ); })}
+        </div>
+      </>
+    );
+  }
+  async function loadGsc() {
+    const { data: sess } = await supabase.auth.getSession();
+    const H = { Authorization: `Bearer ${sess.session?.access_token}` };
+    const r = await fetch(`/api/gsc/data?workspaceId=${id}&series=1&days=365`, { headers: H });
+    const j = await r.json();
+    if (j.ok) { setGscTotals(j.totals); setGscSeries(j.series || []); setGscProp(j.property); setGscReason(""); return; }
+    setGscTotals(null); setGscSeries(null); setGscProp(null); setGscReason(j.reason || "no_data");
+    if (j.reason === "no_property" && !isClient) {
+      const pr = await fetch(`/api/gsc/properties`, { headers: H });
+      const pj = await pr.json(); setGscSites(pj.sites || []);
+    }
+  }
+  async function saveProperty() {
+    if (!gscPickSel) return;
+    setGscBusy(true);
+    const { data: sess } = await supabase.auth.getSession();
+    await fetch(`/api/gsc/property`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${sess.session?.access_token}` }, body: JSON.stringify({ workspaceId: id, property: gscPickSel }) });
+    setGscBusy(false); loadGsc();
+  }
   async function loadDocs() {
     const { data } = await supabase.from("service_documents").select("*").eq("workspace_id", id).eq("service_key", key).order("created_at", { ascending: false });
     setDocs(data || []);
@@ -176,6 +240,7 @@ export default function ClientServiceDashboard() {
     loadDocs();
   }
   useEffect(() => { if (ws?.website) loadTrend(); /* eslint-disable-next-line */ }, [trendWin, ws?.website]);
+  useEffect(() => { if (uid) loadGsc(); /* eslint-disable-next-line */ }, [uid]);
 
   async function loadTasks() {
     const { data } = await supabase.from("tasks").select("id,title,status,assignee_id,client_note,created_at,due_date,priority,frequency,description,deliverable_link,updated_at").eq("workspace_id", id).in("service_key", [key, "general"]).order("created_at", { ascending: true });
@@ -237,10 +302,32 @@ export default function ClientServiceDashboard() {
       </div>
       )}
 
-      <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600, margin: "16px 0 8px" }}>{isSeo ? "Search performance" : (svc?.label + " performance")} <span className="pill p-agency" style={{ marginLeft: 4 }}>connect GSC</span></div>
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 13, color: "var(--muted)" }}>Clicks, impressions, average position and CTR come from Google Search Console. Connect this client's Search Console property to see real numbers here.</div>
-      </div>
+      <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600, margin: "16px 0 8px" }}>{isSeo ? "Search performance" : (svc?.label + " performance")} <span className="pill p-agency" style={{ marginLeft: 4 }}>{gscTotals ? "live · GSC" : "connect GSC"}</span></div>
+      {gscTotals ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
+          {[["Clicks", (gscTotals.clicks || 0).toLocaleString()], ["Impressions", (gscTotals.impressions || 0).toLocaleString()], ["Avg position", gscTotals.position ? gscTotals.position.toFixed(1) : "—"], ["CTR", gscTotals.ctr ? (gscTotals.ctr * 100).toFixed(1) + "%" : "—"]].map(([k, v]) => (
+            <div className="card" key={k} style={{ margin: 0 }}><div style={{ fontSize: 11, color: "var(--faint)" }}>{k}</div><div style={{ fontSize: 20, fontWeight: 600 }}>{v}</div></div>
+          ))}
+        </div>
+      ) : (
+        <div className="card" style={{ marginBottom: 14 }}>
+          {isClient ? <div style={{ fontSize: 13, color: "var(--muted)" }}>Search performance appears once your team connects this data source.</div>
+            : gscReason === "not_connected" ? <div style={{ fontSize: 13, color: "var(--muted)" }}>Connect the agency Google account first in Settings → Data connections.</div>
+            : gscReason === "no_property" ? (
+              <>
+                <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8 }}>Match this client to its Google Search Console property:</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <select className="input" style={{ flex: 1 }} value={gscPickSel} onChange={(e) => setGscPickSel(e.target.value)}>
+                    <option value="">Choose a property…</option>
+                    {gscSites.map((x) => <option key={x} value={x}>{x}</option>)}
+                  </select>
+                  <button className="btn btn-primary" onClick={saveProperty} disabled={gscBusy || !gscPickSel}>{gscBusy ? "Saving…" : "Save"}</button>
+                </div>
+                {gscSites.length === 0 && <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 6 }}>No properties found on the connected Google account.</div>}
+              </>
+            ) : <div style={{ fontSize: 13, color: "var(--muted)" }}>No Search Console data yet for this client.</div>}
+        </div>
+      )}
 
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -274,34 +361,15 @@ export default function ClientServiceDashboard() {
             <span key={k} onClick={() => setTrendWin(k)} style={{ fontSize: 13, cursor: "pointer", padding: "5px 12px", borderRadius: 20, background: trendWin === k ? "#2557C7" : "var(--paper)", color: trendWin === k ? "#fff" : "var(--muted)", border: "0.5px solid var(--line)" }}>{l}</span>
           ))}
         </div>
-        {trendMetric === "clicks" ? <div style={{ fontSize: 13, color: "var(--faint)" }}>Organic clicks come from Google Search Console. Connect GSC (next step) to see this trend.</div>
+        {trendMetric === "clicks"
+          ? (!gscProp
+              ? <div style={{ fontSize: 13, color: "var(--faint)" }}>{isClient ? "Clicks appear once your team connects this data." : "Match this client to a Search Console property in the Search performance section above to see clicks."}</div>
+              : (() => { const ser = bucketClicks(gscSeries || [], trendWin); return ser.length ? trendChart(ser, "clicks") : <div style={{ fontSize: 13, color: "var(--faint)" }}>No Search Console clicks for this range yet.</div>; })())
           : !ws?.website ? <div style={{ fontSize: 13, color: "var(--faint)" }}>Add this client's website to see trends.</div>
           : trendBusy ? <div style={{ fontSize: 13, color: "var(--faint)" }}>Loading trend…</div>
           : trendErr ? <div style={{ fontSize: 13, color: "var(--faint)" }}>{trendErr}</div>
           : trendSeries.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>No trend data for this range yet.</div>
-          : (() => {
-              const vals = trendSeries.map((p) => Number(p[trendMetric]) || 0);
-              const max = Math.max(...vals, 1);
-              const last = vals[vals.length - 1], prev = vals[vals.length - 2];
-              const pct = (prev && prev > 0) ? Math.round(((last - prev) / prev) * 100) : null;
-              const fmt = (l) => l.includes("Q") ? l : (() => { const dt = new Date(l); return dt.toLocaleString("en", { month: "short" }) + " " + String(dt.getFullYear()).slice(2); })();
-              return (
-                <>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12 }}>
-                    <span style={{ fontSize: 26, fontWeight: 700 }}>{last.toLocaleString()}</span>
-                    {pct != null && <span style={{ fontSize: 13, color: pct >= 0 ? "#177E4E" : "var(--danger)" }}>{pct >= 0 ? "▲" : "▼"} {Math.abs(pct)}% vs previous</span>}
-                  </div>
-                  <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 130 }}>
-                    {trendSeries.map((p, i) => { const v = Number(p[trendMetric]) || 0; const h = Math.max(4, Math.round((v / max) * 110)); const isLast = i === trendSeries.length - 1; return (
-                      <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }} title={v.toLocaleString()}>
-                        <div style={{ width: "100%", height: h, background: isLast ? "#2557C7" : "var(--line)", borderRadius: "6px 6px 0 0" }} />
-                        <span style={{ fontSize: 10, color: "var(--faint)", whiteSpace: "nowrap" }}>{fmt(p.label)}</span>
-                      </div>
-                    ); })}
-                  </div>
-                </>
-              );
-            })()}
+          : trendChart(trendSeries, "traffic")}
       </div>
 
       {isSeo && (() => {
