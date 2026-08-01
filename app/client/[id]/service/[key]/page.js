@@ -216,8 +216,6 @@ export default function ClientServiceDashboard() {
         <h1 style={{ fontSize: 24, display: "flex", alignItems: "center", gap: 10 }}>{ws?.name} <span className="pill" style={{ background: "#E7F0FF", color: "#2557C7" }}>{svc?.label || key}</span></h1>
         {!isClient && <span className="pill p-agency">Oversight</span>}
       </div>
-      {!isClient && <div className="empty" style={{ marginBottom: 14 }}>You're seeing exactly what the {svc?.label || "service"} team sees for this client. Internal, the client sees only the reports.</div>}
-
       {!isClient && <AskVelvet focusWorkspaceId={id} serviceKey={key} suggestions={[`How is ${ws?.name || "this client"} doing vs competitors?`, `What should we prioritise for ${ws?.name || "this client"}?`]} />}
 
       {!isClient && (

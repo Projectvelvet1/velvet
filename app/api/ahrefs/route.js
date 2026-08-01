@@ -53,11 +53,11 @@ export async function GET(req) {
     const grouping = sp.get("grouping") || "monthly";
     const date_from = sp.get("date_from") || "2024-01-01";
     try {
-      const r = await fetch(`${base}/metrics-history?${q({ target, date_from, history_grouping: grouping, mode: "subdomains", protocol: "both", select: "date,org_traffic,org_keywords" })}`, { headers: H });
+      const r = await fetch(`${base}/metrics-history?${q({ target, date_from, history_grouping: grouping, mode: "subdomains", protocol: "both", select: "date,org_traffic" })}`, { headers: H });
       if (!r.ok) return Response.json({ error: "ahrefs_failed", message: (await r.text()).slice(0, 200) }, { status: 200 });
       const j = await r.json();
       const rows = Array.isArray(j?.metrics) ? j.metrics : Array.isArray(j?.rows) ? j.rows : Array.isArray(j) ? j : [];
-      const series = rows.map((x) => ({ date: x.date, org_traffic: x.org_traffic ?? null, org_keywords: x.org_keywords ?? null })).filter((x) => x.date);
+      const series = rows.map((x) => ({ date: x.date, org_traffic: x.org_traffic ?? null, org_keywords: null })).filter((x) => x.date);
       return Response.json({ ok: true, target, grouping, series });
     } catch (e) { return Response.json({ error: "ahrefs_error", message: e?.message || String(e) }, { status: 200 }); }
   }
