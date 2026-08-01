@@ -47,7 +47,6 @@ export default function AgencyNav({ profile, active, depts = [] }) {
         <a>Replays</a>
         {isSuper && item("feedback", "Clients feedback", "/feedback")}
         {item("settings", "Settings", "/settings")}
-        <a>Resources</a>
       </nav>
     </>
   );

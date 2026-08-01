@@ -91,7 +91,7 @@ export default function Dashboard() {
         const svcKeys = [...new Set((assignsMine || []).map((a) => a.service_key))];
         setMyServiceLine(svcKeys.map((k) => SVC_LABEL[k] || k).join(", "));
         // their tasks across all clients
-        const { data: mine } = await supabase.from("tasks").select("id,title,status,workspace_id,service_key,updated_at,due_date,priority,description,deliverable_link,frequency,client_note,assignee_id").eq("assignee_id", uid).order("updated_at", { ascending: false });
+        const { data: mine } = await supabase.from("tasks").select("id,title,status,workspace_id,service_key,updated_at,due_date,priority,description,deliverable_link,frequency,client_note,assignee_id,created_by").eq("assignee_id", uid).order("updated_at", { ascending: false });
         const rows = (mine || []).map((t) => ({ ...t, client: nameOf(t.workspace_id) }));
         setMyTasks(rows);
         const now = new Date(); const mKey = now.getFullYear() + "-" + now.getMonth();
@@ -182,6 +182,7 @@ export default function Dashboard() {
     const cDueWeek = openT.filter((t) => t.due_date && t.due_date >= wa && t.due_date <= wb).length;
     const cOverdue = openT.filter((t) => t.due_date && t.due_date < today).length;
     const cUnassigned = openT.filter((t) => !t.due_date || !t.workspace_id).length;
+    const assignedToMe = myTasks.filter((t) => t.created_by && t.created_by !== profile?.id).length;
 
     const [ra, rb] = rangeBounds(myTab);
     const queue = openT.filter((t) => t.due_date && t.due_date >= ra && t.due_date <= rb)
@@ -208,7 +209,7 @@ export default function Dashboard() {
       open: { label: "Open tasks", fn: (t) => ["todo", "in_progress", "needs_look"].includes(t.status) },
       dueWeek: { label: "Due this week", fn: (t) => ["todo","in_progress","needs_look"].includes(t.status) && t.due_date && t.due_date >= wa && t.due_date <= wb },
       overdue: { label: "Overdue", fn: (t) => ["todo","in_progress","needs_look"].includes(t.status) && t.due_date && t.due_date < today },
-      assigned: { label: "Tasks assigned to me", fn: () => true },
+      assigned: { label: "Tasks Assigned", fn: (t) => t.created_by && t.created_by !== profile?.id },
     };
     const filtered = cardFilter && FILTERS[cardFilter] ? myTasks.filter(FILTERS[cardFilter].fn) : [];
     const card = (label, n, fkey, numColor) => (
@@ -243,7 +244,7 @@ export default function Dashboard() {
           {card("Open tasks", openT.length, "open")}
           {card("Due this week", cDueWeek, "dueWeek", cDueWeek ? "#9A6B00" : null)}
           {card("Overdue", cOverdue, "overdue", cOverdue ? "#C0392B" : null)}
-          {card("Tasks assigned to me", myTasks.length, "assigned", myTasks.length ? "#2557C7" : null)}
+          {card("Tasks Assigned", assignedToMe, "assigned", assignedToMe ? "#2557C7" : null)}
         </div>
 
         {cardFilter && (
