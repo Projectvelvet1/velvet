@@ -247,7 +247,7 @@ export default function ClientServiceDashboard() {
 
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <b>Ahrefs overview</b>
+          <b>Traffic overview</b>
           <span className="pill p-agency">{ahrefs?.ok ? "live · Ahrefs" : "demo · Ahrefs"}</span>
         </div>
         {(() => {
@@ -263,6 +263,50 @@ export default function ClientServiceDashboard() {
             {ahrefs && !ahrefs.ok && <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 8 }}>{ahrefs.error === "no_key" ? "Showing sample data — add AHREFS_API_KEY to go live." : ahrefs.error === "no_target" ? "Add this client's website to pull live data." : "Couldn't reach Ahrefs — showing sample data."}</div>}
           </>);
         })()}
+      </div>
+
+      <div className="card" style={{ marginTop: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <b>Trends</b>
+          <span style={{ display: "flex", gap: 6 }}>
+            {[["traffic", "Traffic"], ["clicks", "Clicks"]].map(([k, l]) => (
+              <span key={k} onClick={() => setTrendMetric(k)} style={{ fontSize: 12, cursor: "pointer", padding: "3px 10px", borderRadius: 20, background: trendMetric === k ? "#0B0D12" : "var(--paper)", color: trendMetric === k ? "#fff" : "var(--text)", border: "0.5px solid var(--line)" }}>{l}</span>
+            ))}
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+          {[["weekly", "Weekly"], ["monthly", "Monthly"], ["quarterly", "Quarterly"], ["6m", "6 months"], ["1y", "1 year"]].map(([k, l]) => (
+            <span key={k} onClick={() => setTrendWin(k)} style={{ fontSize: 13, cursor: "pointer", padding: "5px 12px", borderRadius: 20, background: trendWin === k ? "#2557C7" : "var(--paper)", color: trendWin === k ? "#fff" : "var(--muted)", border: "0.5px solid var(--line)" }}>{l}</span>
+          ))}
+        </div>
+        {trendMetric === "clicks" ? <div style={{ fontSize: 13, color: "var(--faint)" }}>Organic clicks come from Google Search Console. Connect GSC (next step) to see this trend.</div>
+          : !ws?.website ? <div style={{ fontSize: 13, color: "var(--faint)" }}>Add this client's website to see trends.</div>
+          : trendBusy ? <div style={{ fontSize: 13, color: "var(--faint)" }}>Loading trend…</div>
+          : trendErr ? <div style={{ fontSize: 13, color: "var(--faint)" }}>{trendErr}</div>
+          : trendSeries.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>No trend data for this range yet.</div>
+          : (() => {
+              const vals = trendSeries.map((p) => Number(p[trendMetric]) || 0);
+              const max = Math.max(...vals, 1);
+              const last = vals[vals.length - 1], prev = vals[vals.length - 2];
+              const pct = (prev && prev > 0) ? Math.round(((last - prev) / prev) * 100) : null;
+              const fmt = (l) => l.includes("Q") ? l : (() => { const dt = new Date(l); return dt.toLocaleString("en", { month: "short" }) + " " + String(dt.getFullYear()).slice(2); })();
+              return (
+                <>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12 }}>
+                    <span style={{ fontSize: 26, fontWeight: 700 }}>{last.toLocaleString()}</span>
+                    {pct != null && <span style={{ fontSize: 13, color: pct >= 0 ? "#177E4E" : "var(--danger)" }}>{pct >= 0 ? "▲" : "▼"} {Math.abs(pct)}% vs previous</span>}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 130 }}>
+                    {trendSeries.map((p, i) => { const v = Number(p[trendMetric]) || 0; const h = Math.max(4, Math.round((v / max) * 110)); const isLast = i === trendSeries.length - 1; return (
+                      <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }} title={v.toLocaleString()}>
+                        <div style={{ width: "100%", height: h, background: isLast ? "#2557C7" : "var(--line)", borderRadius: "6px 6px 0 0" }} />
+                        <span style={{ fontSize: 10, color: "var(--faint)", whiteSpace: "nowrap" }}>{fmt(p.label)}</span>
+                      </div>
+                    ); })}
+                  </div>
+                </>
+              );
+            })()}
       </div>
 
       {isSeo && (() => {
@@ -354,48 +398,7 @@ export default function ClientServiceDashboard() {
         })()}
       </div>
 
-      <div className="card" style={{ marginTop: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <b>Trends</b>
-          <span style={{ display: "flex", gap: 6 }}>
-            {[["traffic", "Traffic"], ["keywords", "Keywords"]].map(([k, l]) => (
-              <span key={k} onClick={() => setTrendMetric(k)} style={{ fontSize: 12, cursor: "pointer", padding: "3px 10px", borderRadius: 20, background: trendMetric === k ? "#0B0D12" : "var(--paper)", color: trendMetric === k ? "#fff" : "var(--text)", border: "0.5px solid var(--line)" }}>{l}</span>
-            ))}
-          </span>
-        </div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-          {[["weekly", "Weekly"], ["monthly", "Monthly"], ["quarterly", "Quarterly"], ["6m", "6 months"], ["1y", "1 year"]].map(([k, l]) => (
-            <span key={k} onClick={() => setTrendWin(k)} style={{ fontSize: 13, cursor: "pointer", padding: "5px 12px", borderRadius: 20, background: trendWin === k ? "#2557C7" : "var(--paper)", color: trendWin === k ? "#fff" : "var(--muted)", border: "0.5px solid var(--line)" }}>{l}</span>
-          ))}
-        </div>
-        {!ws?.website ? <div style={{ fontSize: 13, color: "var(--faint)" }}>Add this client's website to see trends.</div>
-          : trendBusy ? <div style={{ fontSize: 13, color: "var(--faint)" }}>Loading trend…</div>
-          : trendErr ? <div style={{ fontSize: 13, color: "var(--faint)" }}>{trendErr}</div>
-          : trendSeries.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>No trend data for this range yet.</div>
-          : (() => {
-              const vals = trendSeries.map((p) => Number(p[trendMetric]) || 0);
-              const max = Math.max(...vals, 1);
-              const last = vals[vals.length - 1], prev = vals[vals.length - 2];
-              const pct = (prev && prev > 0) ? Math.round(((last - prev) / prev) * 100) : null;
-              const fmt = (l) => l.includes("Q") ? l : (() => { const dt = new Date(l); return dt.toLocaleString("en", { month: "short" }) + " " + String(dt.getFullYear()).slice(2); })();
-              return (
-                <>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12 }}>
-                    <span style={{ fontSize: 26, fontWeight: 700 }}>{last.toLocaleString()}</span>
-                    {pct != null && <span style={{ fontSize: 13, color: pct >= 0 ? "#177E4E" : "var(--danger)" }}>{pct >= 0 ? "▲" : "▼"} {Math.abs(pct)}% vs previous</span>}
-                  </div>
-                  <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 130 }}>
-                    {trendSeries.map((p, i) => { const v = Number(p[trendMetric]) || 0; const h = Math.max(4, Math.round((v / max) * 110)); const isLast = i === trendSeries.length - 1; return (
-                      <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }} title={v.toLocaleString()}>
-                        <div style={{ width: "100%", height: h, background: isLast ? "#2557C7" : "var(--line)", borderRadius: "6px 6px 0 0" }} />
-                        <span style={{ fontSize: 10, color: "var(--faint)", whiteSpace: "nowrap" }}>{fmt(p.label)}</span>
-                      </div>
-                    ); })}
-                  </div>
-                </>
-              );
-            })()}
-      </div>
+
 
       <div className="card" style={{ marginTop: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
