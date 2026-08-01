@@ -54,6 +54,11 @@ export default function ClientServiceDashboard() {
   const [uid, setUid] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [docs, setDocs] = useState([]);
+  const [trendWin, setTrendWin] = useState("monthly");
+  const [trendMetric, setTrendMetric] = useState("traffic");
+  const [trendSeries, setTrendSeries] = useState([]);
+  const [trendBusy, setTrendBusy] = useState(false);
+  const [trendErr, setTrendErr] = useState("");
   const [docName, setDocName] = useState("");
   const [docUrl, setDocUrl] = useState("");
   const [docBusy, setDocBusy] = useState(false);
@@ -125,6 +130,31 @@ export default function ClientServiceDashboard() {
     loadComps();
   }
 
+  function bucketQuarters(pts) {
+    const m = {};
+    pts.forEach((p) => { const dt = new Date(p.label); const qk = dt.getFullYear() + "-Q" + (Math.floor(dt.getMonth() / 3) + 1); if (!m[qk]) m[qk] = { label: qk, traffic: 0, keywords: 0 }; m[qk].traffic += (p.traffic || 0); m[qk].keywords = p.keywords || m[qk].keywords; });
+    return Object.values(m);
+  }
+  async function loadTrend() {
+    if (!ws?.website) { setTrendSeries([]); return; }
+    setTrendBusy(true); setTrendErr("");
+    const d = new Date(); let grouping = "monthly";
+    if (trendWin === "weekly") { grouping = "weekly"; d.setDate(d.getDate() - 7 * 13); }
+    else if (trendWin === "quarterly") { d.setMonth(d.getMonth() - 24); }
+    else if (trendWin === "6m") { d.setMonth(d.getMonth() - 6); }
+    else { d.setMonth(d.getMonth() - 12); }
+    const date_from = d.toISOString().slice(0, 10);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const H = { Authorization: `Bearer ${sess.session?.access_token}` };
+      const r = await fetch(`/api/ahrefs?kind=history&grouping=${grouping}&date_from=${date_from}&target=${encodeURIComponent(ws.website)}`, { headers: H });
+      const j = await r.json(); setTrendBusy(false);
+      if (!j.ok) { setTrendErr(j.message || "Couldn't load the trend."); setTrendSeries([]); return; }
+      let pts = (j.series || []).map((x) => ({ label: x.date, traffic: x.org_traffic, keywords: x.org_keywords }));
+      if (trendWin === "quarterly") pts = bucketQuarters(pts);
+      setTrendSeries(pts);
+    } catch (e) { setTrendBusy(false); setTrendErr("Couldn't load the trend."); setTrendSeries([]); }
+  }
   async function loadDocs() {
     const { data } = await supabase.from("service_documents").select("*").eq("workspace_id", id).eq("service_key", key).order("created_at", { ascending: false });
     setDocs(data || []);
@@ -143,6 +173,8 @@ export default function ClientServiceDashboard() {
     await supabase.from("service_documents").delete().eq("id", docId);
     loadDocs();
   }
+  useEffect(() => { if (ws?.website) loadTrend(); /* eslint-disable-next-line */ }, [trendWin, ws?.website]);
+
   async function loadTasks() {
     const { data } = await supabase.from("tasks").select("id,title,status,assignee_id,client_note,created_at,due_date,priority,updated_at").eq("workspace_id", id).in("service_key", [key, "general"]).order("created_at", { ascending: true });
     setTasks(data || []);
@@ -320,6 +352,49 @@ export default function ClientServiceDashboard() {
             );
           });
         })()}
+      </div>
+
+      <div className="card" style={{ marginTop: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <b>Trends</b>
+          <span style={{ display: "flex", gap: 6 }}>
+            {[["traffic", "Traffic"], ["keywords", "Keywords"]].map(([k, l]) => (
+              <span key={k} onClick={() => setTrendMetric(k)} style={{ fontSize: 12, cursor: "pointer", padding: "3px 10px", borderRadius: 20, background: trendMetric === k ? "#0B0D12" : "var(--paper)", color: trendMetric === k ? "#fff" : "var(--text)", border: "0.5px solid var(--line)" }}>{l}</span>
+            ))}
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+          {[["weekly", "Weekly"], ["monthly", "Monthly"], ["quarterly", "Quarterly"], ["6m", "6 months"], ["1y", "1 year"]].map(([k, l]) => (
+            <span key={k} onClick={() => setTrendWin(k)} style={{ fontSize: 13, cursor: "pointer", padding: "5px 12px", borderRadius: 20, background: trendWin === k ? "#2557C7" : "var(--paper)", color: trendWin === k ? "#fff" : "var(--muted)", border: "0.5px solid var(--line)" }}>{l}</span>
+          ))}
+        </div>
+        {!ws?.website ? <div style={{ fontSize: 13, color: "var(--faint)" }}>Add this client's website to see trends.</div>
+          : trendBusy ? <div style={{ fontSize: 13, color: "var(--faint)" }}>Loading trend…</div>
+          : trendErr ? <div style={{ fontSize: 13, color: "var(--faint)" }}>{trendErr}</div>
+          : trendSeries.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>No trend data for this range yet.</div>
+          : (() => {
+              const vals = trendSeries.map((p) => Number(p[trendMetric]) || 0);
+              const max = Math.max(...vals, 1);
+              const last = vals[vals.length - 1], prev = vals[vals.length - 2];
+              const pct = (prev && prev > 0) ? Math.round(((last - prev) / prev) * 100) : null;
+              const fmt = (l) => l.includes("Q") ? l : (() => { const dt = new Date(l); return dt.toLocaleString("en", { month: "short" }) + " " + String(dt.getFullYear()).slice(2); })();
+              return (
+                <>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12 }}>
+                    <span style={{ fontSize: 26, fontWeight: 700 }}>{last.toLocaleString()}</span>
+                    {pct != null && <span style={{ fontSize: 13, color: pct >= 0 ? "#177E4E" : "var(--danger)" }}>{pct >= 0 ? "▲" : "▼"} {Math.abs(pct)}% vs previous</span>}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 130 }}>
+                    {trendSeries.map((p, i) => { const v = Number(p[trendMetric]) || 0; const h = Math.max(4, Math.round((v / max) * 110)); const isLast = i === trendSeries.length - 1; return (
+                      <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }} title={v.toLocaleString()}>
+                        <div style={{ width: "100%", height: h, background: isLast ? "#2557C7" : "var(--line)", borderRadius: "6px 6px 0 0" }} />
+                        <span style={{ fontSize: 10, color: "var(--faint)", whiteSpace: "nowrap" }}>{fmt(p.label)}</span>
+                      </div>
+                    ); })}
+                  </div>
+                </>
+              );
+            })()}
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
