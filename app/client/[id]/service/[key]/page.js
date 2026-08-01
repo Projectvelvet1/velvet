@@ -68,6 +68,7 @@ export default function ClientServiceDashboard() {
   const [gscReason, setGscReason] = useState("");
   const [gscPickSel, setGscPickSel] = useState("");
   const [gscBusy, setGscBusy] = useState(false);
+  const [gscSitesErr, setGscSitesErr] = useState("");
   const [docName, setDocName] = useState("");
   const [docUrl, setDocUrl] = useState("");
   const [docBusy, setDocBusy] = useState(false);
@@ -211,7 +212,7 @@ export default function ClientServiceDashboard() {
     setGscTotals(null); setGscSeries(null); setGscProp(null); setGscReason(j.reason || "no_data");
     if (j.reason === "no_property" && !isClient) {
       const pr = await fetch(`/api/gsc/properties`, { headers: H });
-      const pj = await pr.json(); setGscSites(pj.sites || []);
+      const pj = await pr.json(); setGscSites(pj.sites || []); setGscSitesErr(pj.error || "");
     }
   }
   async function saveProperty() {
@@ -323,7 +324,7 @@ export default function ClientServiceDashboard() {
                   </select>
                   <button className="btn btn-primary" onClick={saveProperty} disabled={gscBusy || !gscPickSel}>{gscBusy ? "Saving…" : "Save"}</button>
                 </div>
-                {gscSites.length === 0 && <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 6 }}>No properties found on the connected Google account.</div>}
+                {gscSitesErr && <div style={{ fontSize: 12, color: "var(--danger)", marginTop: 6 }}>{gscSitesErr}</div>}
               </>
             ) : <div style={{ fontSize: 13, color: "var(--muted)" }}>No Search Console data yet for this client.</div>}
         </div>
