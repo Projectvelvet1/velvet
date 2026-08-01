@@ -176,14 +176,14 @@ export default function ClientView({ workspace, services = [], profile, viewingA
       <div className="grp">Account</div>
       <nav className="nav">
         <a className="on">Onboarding</a>
-        <a style={{ opacity: onboarded ? 1 : .4, cursor: onboarded ? "pointer" : "default" }}>Team</a>
+        <a style={{ opacity: onboarded ? 1 : .4, cursor: onboarded ? "pointer" : "default" }} onClick={() => onboarded && !viewingAs && setClientTab("settings")}>Team</a>
       </nav>
       {Object.keys(grouped).map((dep) => (
         <div key={dep}>
           <div className="grp">{DEPT_LABEL[dep] || dep}</div>
           <nav className="nav">
             {grouped[dep].map((s) => (
-              <a key={s.service_key} className={"svc-menu svc svc-" + s.service_key} style={{ opacity: onboarded ? 1 : .4, cursor: onboarded ? "pointer" : "default" }}><span className="svc-dot" />{s.service_label}</a>
+              <a key={s.service_key} className={"svc-menu svc svc-" + s.service_key} style={{ opacity: onboarded ? 1 : .4, cursor: onboarded ? "pointer" : "default" }} onClick={() => onboarded && router.push(`/client/${workspace.id}/service/${s.service_key}`)}><span className="svc-dot" />{s.service_label}</a>
             ))}
           </nav>
         </div>
