@@ -53,6 +53,11 @@ export default function ClientServiceDashboard() {
   const [isClient, setIsClient] = useState(false);
   const [uid, setUid] = useState(null);
   const [tasks, setTasks] = useState([]);
+  const [docs, setDocs] = useState([]);
+  const [docName, setDocName] = useState("");
+  const [docUrl, setDocUrl] = useState("");
+  const [docBusy, setDocBusy] = useState(false);
+  const [docErr, setDocErr] = useState("");
   const [newTask, setNewTask] = useState("");
   const [ahrefs, setAhrefs] = useState(null);
   const [kw, setKw] = useState(null);
@@ -104,6 +109,7 @@ export default function ClientServiceDashboard() {
       setUid(uid);
       await loadComps();
       await loadTasks();
+      await loadDocs();
       setLoading(false);
     })();
   }, [router, id, key]);
@@ -119,6 +125,24 @@ export default function ClientServiceDashboard() {
     loadComps();
   }
 
+  async function loadDocs() {
+    const { data } = await supabase.from("service_documents").select("*").eq("workspace_id", id).eq("service_key", key).order("created_at", { ascending: false });
+    setDocs(data || []);
+  }
+  async function addDoc() {
+    const name = docName.trim(); let url = docUrl.trim();
+    if (!name || !url) { setDocErr("Add a name and a link."); return; }
+    if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+    setDocBusy(true); setDocErr("");
+    const { error } = await supabase.from("service_documents").insert({ workspace_id: id, service_key: key, name, url, created_by: uid, created_by_name: profile?.full_name || profile?.email || null });
+    setDocBusy(false);
+    if (error) { setDocErr(error.message || "Could not add."); return; }
+    setDocName(""); setDocUrl(""); loadDocs();
+  }
+  async function removeDoc(docId) {
+    await supabase.from("service_documents").delete().eq("id", docId);
+    loadDocs();
+  }
   async function loadTasks() {
     const { data } = await supabase.from("tasks").select("id,title,status,assignee_id,client_note,created_at,due_date,priority,updated_at").eq("workspace_id", id).in("service_key", [key, "general"]).order("created_at", { ascending: true });
     setTasks(data || []);
@@ -299,8 +323,30 @@ export default function ClientServiceDashboard() {
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <b>Brand &amp; knowledge hub</b>
-        <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 6 }}>The client's brand documents arrive with the document library (a later build).</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <b>Documents</b>
+          <span style={{ fontSize: 12, color: "var(--faint)" }}>{svc?.label} · {isClient ? "shared with you" : "only this client sees these"}</span>
+        </div>
+        {docs.length === 0
+          ? <div style={{ fontSize: 13, color: "var(--faint)", marginTop: 10 }}>No documents yet.{isClient ? "" : " Add your audit, slides, or QBR deck below."}</div>
+          : <div style={{ marginTop: 10, border: "0.5px solid var(--line)", borderRadius: 8 }}>
+              {docs.map((d, i) => (
+                <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderTop: i ? "0.5px solid var(--line)" : "none", fontSize: 14 }}>
+                  <a href={d.url} target="_blank" rel="noreferrer" style={{ color: "var(--text)", textDecoration: "none", flex: 1 }}>{d.name}</a>
+                  <a href={d.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#2557C7" }}>Open ↗</a>
+                  {!isClient && <span onClick={() => removeDoc(d.id)} style={{ fontSize: 12, color: "var(--danger)", cursor: "pointer" }}>Remove</span>}
+                </div>
+              ))}
+            </div>}
+        {!isClient && (
+          <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1.4fr auto", gap: 8, alignItems: "center" }}>
+            <input className="input" value={docName} onChange={(e) => setDocName(e.target.value)} placeholder="Document name" />
+            <input className="input" value={docUrl} onChange={(e) => setDocUrl(e.target.value)} placeholder="Paste Google Drive link…" />
+            <button className="btn btn-primary" onClick={addDoc} disabled={docBusy}>{docBusy ? "Adding…" : "Add"}</button>
+          </div>
+        )}
+        {!isClient && docErr && <div className="auth-msg auth-err" style={{ marginTop: 8 }}>{docErr}</div>}
+        {!isClient && <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 8 }}>Make sure the Drive file is shared so anyone with the link can view, or the client will hit a sign-in wall.</div>}
       </div>
 
 
