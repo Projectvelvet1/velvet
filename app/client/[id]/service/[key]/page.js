@@ -122,6 +122,12 @@ export default function ClientServiceDashboard() {
       const ids = [...new Set((asg || []).map((a) => a.profile_id))];
       const { data: profs } = ids.length ? await supabase.from("profiles").select("id,full_name,email").in("id", ids) : { data: [] };
       setMembers(profs || []);
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        const tr = await fetch(`/api/client-team?workspaceId=${id}`, { headers: { Authorization: `Bearer ${sess.session?.access_token}` } });
+        const tj = await tr.json();
+        if (tj.ok) { setAgencyPeople(tj.agencyPeople || []); setClientPeople(tj.clientPeople || []); }
+      } catch {}
       setUid(uid);
       await loadComps();
       await loadTasks();
