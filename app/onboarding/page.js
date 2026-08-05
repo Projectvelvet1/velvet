@@ -14,6 +14,7 @@ export default function Onboarding() {
   const [answers, setAnswers] = useState({});
   const [sections, setSections] = useState(INTAKE_STEPS);
   const [step, setStep] = useState(0);
+  const [showErrors, setShowErrors] = useState(false);
   const [loading, setLoading] = useState(true);
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -51,11 +52,22 @@ export default function Onboarding() {
   const isLast = step === sections.length - 1;
   const set = (k, v) => setAnswers((p) => ({ ...p, [k]: v }));
   const toggleMulti = (k, opt) => setAnswers((p) => { const arr = Array.isArray(p[k]) ? p[k] : []; return { ...p, [k]: arr.includes(opt) ? arr.filter((x) => x !== opt) : [...arr, opt] }; });
+  function isAnswered(q) {
+    if (q.type === "multiselect") return Array.isArray(answers[q.key]) && answers[q.key].length > 0;
+    if (q.type === "contact") return (q.fields || []).every(([sub]) => String(answers[`${q.key}_${sub}`] || "").trim());
+    if (q.type === "ack") return answers[q.key] === "Acknowledged";
+    return String(answers[q.key] || "").trim().length > 0;
+  }
+  const missingIn = (sec) => sec.questions.filter((q) => !isAnswered(q));
+  function goNext() {
+    if (missingIn(cur).length) { setShowErrors(true); setErr("Please fill in every field in this section before continuing."); return; }
+    setShowErrors(false); setErr(""); setStep((s) => Math.min(sections.length - 1, s + 1));
+  }
+  function goBack() { setShowErrors(false); setErr(""); setStep((s) => Math.max(0, s - 1)); }
 
   async function submit() {
-    // require the SLA acknowledgment
-    const ackQ = sections.flatMap((s) => s.questions).find((q) => q.type === "ack");
-    if (ackQ && answers[ackQ.key] !== "Acknowledged") { setErr("Please tick the acknowledgment to finish."); return; }
+    const firstBad = sections.findIndex((sec) => missingIn(sec).length > 0);
+    if (firstBad !== -1) { setStep(firstBad); setShowErrors(true); setErr("Please fill in every field before submitting."); return; }
     setBusy(true); setErr("");
     const map = {};
     sections.forEach((s) => s.questions.forEach((q) => {
@@ -96,13 +108,13 @@ export default function Onboarding() {
 
       {cur.subtitle && <div style={{ fontSize: 13, color: MUT, marginBottom: 16 }}>{cur.subtitle}</div>}
 
-      {cur.questions.map((q) => (
+      {cur.questions.map((q) => { const miss = showErrors && !isAnswered(q); return (
         <div key={q.key} style={{ marginBottom: 18 }}>
-          <label style={{ fontSize: 14, fontWeight: 600, display: "block", marginBottom: 7 }}>{q.label}</label>
+          <label style={{ fontSize: 14, fontWeight: 600, display: "block", marginBottom: 7 }}>{q.label} <span style={{ color: miss ? "#F2B4A3" : "#7C879B", fontSize: 11, fontWeight: 400 }}>Required</span></label>
           {q.helper && <div style={{ fontSize: 12, color: MUT, marginTop: -3, marginBottom: 7 }}>{q.helper}</div>}
 
           {q.type === "textarea" ? (
-            <textarea value={answers[q.key] || ""} onChange={(e) => set(q.key, e.target.value)} rows={3} style={inp} placeholder="Your answer" />
+            <textarea value={answers[q.key] || ""} onChange={(e) => set(q.key, e.target.value)} rows={3} style={miss ? inpErr : inp} placeholder="Your answer" />
           ) : q.type === "select" ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {q.options.map((opt) => { const on = answers[q.key] === opt; return (
@@ -119,32 +131,33 @@ export default function Onboarding() {
             </div>
           ) : q.type === "contact" ? (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {q.fields.map(([sub, subLabel]) => <input key={sub} value={answers[`${q.key}_${sub}`] || ""} onChange={(e) => set(`${q.key}_${sub}`, e.target.value)} style={inp} placeholder={subLabel} />)}
+              {q.fields.map(([sub, subLabel]) => <input key={sub} value={answers[`${q.key}_${sub}`] || ""} onChange={(e) => set(`${q.key}_${sub}`, e.target.value)} style={miss ? inpErr : inp} placeholder={subLabel} />)}
             </div>
           ) : q.type === "ack" ? (
-            <div onClick={() => set(q.key, answers[q.key] === "Acknowledged" ? "" : "Acknowledged")} style={{ display: "flex", gap: 10, alignItems: "flex-start", border: `1px solid ${answers[q.key] === "Acknowledged" ? GOLD : LINE}`, background: answers[q.key] === "Acknowledged" ? "rgba(247,201,72,.12)" : CARD, borderRadius: 10, padding: 12, cursor: "pointer" }}>
+            <div onClick={() => set(q.key, answers[q.key] === "Acknowledged" ? "" : "Acknowledged")} style={{ display: "flex", gap: 10, alignItems: "flex-start", border: `1px solid ${answers[q.key] === "Acknowledged" ? GOLD : (miss ? "#C0392B" : LINE)}`, background: answers[q.key] === "Acknowledged" ? "rgba(247,201,72,.12)" : CARD, borderRadius: 10, padding: 12, cursor: "pointer" }}>
               <span style={{ color: GOLD, fontSize: 16 }}>{answers[q.key] === "Acknowledged" ? "☑" : "☐"}</span>
               <span style={{ fontSize: 13, color: "#E7EAF0" }}>{q.ackText} <span style={{ color: "#F2B4A3" }}>Required</span></span>
             </div>
           ) : (
-            <input value={answers[q.key] || ""} onChange={(e) => set(q.key, e.target.value)} style={inp} placeholder={q.type === "url" ? "https://…" : "Your answer"} />
+            <input value={answers[q.key] || ""} onChange={(e) => set(q.key, e.target.value)} style={miss ? inpErr : inp} placeholder={q.type === "url" ? "https://…" : "Your answer"} />
           )}
         </div>
-      ))}
+      ); })}
 
       {err && <div style={{ fontSize: 13, color: "#F2B4A3", margin: "6px 0 10px" }}>{err}</div>}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `0.5px solid ${LINE}`, paddingTop: 16, marginTop: 6 }}>
-        <button onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0} style={{ background: "transparent", color: step === 0 ? LINE : MUT, border: "none", fontSize: 14, cursor: step === 0 ? "default" : "pointer" }}>← Back</button>
+        <button onClick={goBack} disabled={step === 0} style={{ background: "transparent", color: step === 0 ? LINE : MUT, border: "none", fontSize: 14, cursor: step === 0 ? "default" : "pointer" }}>← Back</button>
         {isLast
           ? <button onClick={submit} disabled={busy} style={goldBtn}>{busy ? "Submitting…" : "Submit"}</button>
-          : <button onClick={() => setStep((s) => Math.min(sections.length - 1, s + 1))} style={goldBtn}>Next →</button>}
+          : <button onClick={goNext} style={goldBtn}>Next →</button>}
       </div>
     </div></div>
   );
 }
 
 const inp = { width: "100%", background: CARD, border: "0.5px solid #2A3550", borderRadius: 10, padding: "11px 13px", color: "#fff", fontSize: 14, fontFamily: "Outfit, sans-serif", boxSizing: "border-box" };
+const inpErr = { ...inp, border: "1px solid #C0392B" };
 const optRow = { display: "flex", gap: 10, alignItems: "center", border: "1px solid #2A3550", borderRadius: 10, padding: "11px 13px", fontSize: 13, color: "#E7EAF0", cursor: "pointer" };
 const pill = { border: "0.5px solid #2A3550", borderRadius: 20, padding: "8px 14px", fontSize: 13, cursor: "pointer" };
 const goldBtn = { background: "#F7C948", color: "#0B0D12", border: "none", borderRadius: 10, padding: "11px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" };
