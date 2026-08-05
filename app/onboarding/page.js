@@ -12,6 +12,7 @@ export default function Onboarding() {
   const [phase, setPhase] = useState("full");
   const [asAgency, setAsAgency] = useState(false);
   const [answers, setAnswers] = useState({});
+  const [sections, setSections] = useState(INTAKE_STEPS);
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(true);
   const [done, setDone] = useState(false);
@@ -32,15 +33,20 @@ export default function Onboarding() {
       if (!wk) { setLoading(false); return; }
       setWs(wk);
       const ph = wk.phase === "prospect" ? "discovery" : "full"; setPhase(ph);
+      let form = INTAKE_STEPS;
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        const fr = await fetch(`/api/onboarding-form?workspaceId=${wk.id}`, { headers: { Authorization: `Bearer ${sess.session?.access_token}` } });
+        const fj = await fr.json(); if (fj.ok && Array.isArray(fj.definition) && fj.definition.length) form = fj.definition;
+      } catch {}
+      setSections(form);
       const { data: resp } = await supabase.from("onboarding_responses").select("question_key,answer").eq("workspace_id", wk.id).eq("phase", ph);
       const a = {}; (resp || []).forEach((r) => { a[r.question_key] = r.answer; });
-      // rehydrate multiselect (comma-joined) back into arrays
-      INTAKE_STEPS.forEach((s) => s.questions.forEach((q) => { if (q.type === "multiselect" && a[q.key]) a[q.key] = String(a[q.key]).split(", ").filter(Boolean); }));
+      form.forEach((s) => s.questions.forEach((q) => { if (q.type === "multiselect" && a[q.key]) a[q.key] = String(a[q.key]).split(", ").filter(Boolean); }));
       setAnswers(a); setLoading(false);
     })();
   }, [router]);
 
-  const sections = INTAKE_STEPS;
   const cur = sections[step];
   const isLast = step === sections.length - 1;
   const set = (k, v) => setAnswers((p) => ({ ...p, [k]: v }));
