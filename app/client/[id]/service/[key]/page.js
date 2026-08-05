@@ -10,6 +10,7 @@ import AssignTask from "../../../../../components/AssignTask";
 import AskVelvet from "../../../../../components/AskVelvet";
 import TaskDetail from "../../../../../components/TaskDetail";
 import PaidMediaReport from "../../../../../components/PaidMediaReport";
+import AsoReport from "../../../../../components/AsoReport";
 import { loadAgencyDepts, DEPARTMENTS } from "../../../../../lib/agencyNav";
 
 export const dynamic = "force-dynamic";
@@ -91,6 +92,7 @@ export default function ClientServiceDashboard() {
   const svc = DEPARTMENTS.flatMap((d) => d.services).find((s) => s.key === key);
   const isSeo = key === "seo";
   const isPaid = key === "paid_media";
+  const isAso = key === "aso";
 
   async function loadComps() {
     const { data } = await supabase.from("competitors").select("id,name").eq("workspace_id", id).eq("service_key", key).order("created_at");
@@ -323,7 +325,8 @@ export default function ClientServiceDashboard() {
       )}
 
       {isPaid && <PaidMediaReport isClient={isClient} name={ws?.name} />}
-      {!isSeo && !isPaid && <div className="card" style={{ marginTop: 4 }}><b>{svc?.label} dashboard</b><div style={{ fontSize: 13, color: "var(--faint)", marginTop: 4 }}>This service's dashboard is coming soon. Tasks and documents below are already active.</div></div>}
+      {isAso && <AsoReport isClient={isClient} name={ws?.name} />}
+      {!isSeo && !isPaid && !isAso && <div className="card" style={{ marginTop: 4 }}><b>{svc?.label} dashboard</b><div style={{ fontSize: 13, color: "var(--faint)", marginTop: 4 }}>This service's dashboard is coming soon. Tasks and documents below are already active.</div></div>}
       {isSeo && (<>
       <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600, margin: "16px 0 8px" }}>{isSeo ? "Search performance" : (svc?.label + " performance")} <span className="pill p-agency" style={{ marginLeft: 4 }}>{gscTotals ? "live · GSC" : "connect GSC"}</span></div>
       {gscTotals ? (
