@@ -10,7 +10,7 @@ export async function POST(req) {
   if (!token) return Response.json({ error: "Not allowed" }, { status: 403 });
   const asUser = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     { global: { headers: { Authorization: `Bearer ${token}` } } });
-  const { data: { user } } = await asUser.auth.getUser();
+  const { data: { user } } = await asUser.auth.getUser(token);
   if (!user) return Response.json({ error: "Not allowed" }, { status: 403 });
 
   let body; try { body = await req.json(); } catch { return Response.json({ error: "Bad request" }, { status: 400 }); }

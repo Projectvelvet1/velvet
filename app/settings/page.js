@@ -56,6 +56,7 @@ export default function Settings() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         {tile("Appearance", "Light mode and other display preferences.", "#", false)}
         {profile?.is_super_admin && tile("Data connections", "Connect Google Search Console and other data sources.", "/settings/connections")}
+        {profile?.is_super_admin && tile("Onboarding answers", "View and download every client's onboarding answers as a Word or PDF file.", "/settings/onboarding-answers")}
       </div>
     </Shell>
   );

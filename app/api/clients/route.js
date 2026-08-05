@@ -17,7 +17,7 @@ async function agencyUser(req) {
   if (!token) return null;
   const asUser = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     { global: { headers: { Authorization: `Bearer ${token}` } } });
-  const { data: { user } } = await asUser.auth.getUser();
+  const { data: { user } } = await asUser.auth.getUser(token);
   if (!user) return null;
   const { data: prof } = await asUser.from("profiles").select("side,is_super_admin").eq("id", user.id).single();
   if (prof?.side !== "agency") return null;

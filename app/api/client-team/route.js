@@ -9,7 +9,7 @@ async function caller(req) {
   if (!token) return null;
   const asUser = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     { global: { headers: { Authorization: `Bearer ${token}` } } });
-  const { data: { user } } = await asUser.auth.getUser();
+  const { data: { user } } = await asUser.auth.getUser(token);
   return user || null;
 }
 async function isMember(db, uid, workspaceId) {
