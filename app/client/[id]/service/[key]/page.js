@@ -13,6 +13,7 @@ import PaidMediaReport from "../../../../../components/PaidMediaReport";
 import AsoReport from "../../../../../components/AsoReport";
 import AnalyticsReport from "../../../../../components/AnalyticsReport";
 import TrackingReport from "../../../../../components/TrackingReport";
+import CreativeReport from "../../../../../components/CreativeReport";
 import { loadAgencyDepts, DEPARTMENTS } from "../../../../../lib/agencyNav";
 
 export const dynamic = "force-dynamic";
@@ -97,6 +98,7 @@ export default function ClientServiceDashboard() {
   const isAso = key === "aso";
   const isDashboarding = key === "dashboarding";
   const isTracking = key === "tracking";
+  const isCreative = key === "creative_strategy";
 
   async function loadComps() {
     const { data } = await supabase.from("competitors").select("id,name").eq("workspace_id", id).eq("service_key", key).order("created_at");
@@ -332,7 +334,8 @@ export default function ClientServiceDashboard() {
       {isAso && <AsoReport isClient={isClient} name={ws?.name} />}
       {isDashboarding && <AnalyticsReport isClient={isClient} name={ws?.name} />}
       {isTracking && <TrackingReport isClient={isClient} name={ws?.name} />}
-      {!isSeo && !isPaid && !isAso && !isDashboarding && !isTracking && <div className="card" style={{ marginTop: 4 }}><b>{svc?.label} dashboard</b><div style={{ fontSize: 13, color: "var(--faint)", marginTop: 4 }}>This service's dashboard is coming soon. Tasks and documents below are already active.</div></div>}
+      {isCreative && <CreativeReport isClient={isClient} name={ws?.name} />}
+      {!isSeo && !isPaid && !isAso && !isDashboarding && !isTracking && !isCreative && <div className="card" style={{ marginTop: 4 }}><b>{svc?.label} dashboard</b><div style={{ fontSize: 13, color: "var(--faint)", marginTop: 4 }}>This service's dashboard is coming soon. Tasks and documents below are already active.</div></div>}
       {isSeo && (<>
       <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600, margin: "16px 0 8px" }}>{isSeo ? "Search performance" : (svc?.label + " performance")} <span className="pill p-agency" style={{ marginLeft: 4 }}>{gscTotals ? "live · GSC" : "connect GSC"}</span></div>
       {gscTotals ? (
