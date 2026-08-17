@@ -16,7 +16,8 @@ export default function AgencyNav({ profile, active, depts = [] }) {
     <>
       <div className="grp">Work</div>
       <nav className="nav">
-        {item("dashboard", "Dashboard", "/dashboard")}
+        {item("overview", "Overview", "/overview")}
+        {item("mywork", "My Work", "/my-work")}
         {item("clients", "Clients", "/clients")}
         {isSuper && item("prospects", "Future Clients", "/prospects")}
       </nav>

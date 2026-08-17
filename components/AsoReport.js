@@ -72,7 +72,7 @@ export default function AsoReport({ isClient, name }) {
 
       {/* Keyword rankings */}
       <div className="card" style={{ marginTop: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><b style={{ fontSize: 15 }}>Keyword rankings</b><span style={{ fontSize: 11, color: "var(--faint)" }}>AppTweak later · demo</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><b style={{ fontSize: 15 }}>Keyword rankings</b><span style={{ fontSize: 11, color: "var(--faint)" }}>AppTweak later · demo <span style={{ fontSize: 11, background: "#FDECC8", color: "#7A4B0C", padding: "2px 8px", borderRadius: 20, marginLeft: 6 }}>estimate</span></span></div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 10 }}>
             <thead><tr style={{ color: "var(--faint)", fontSize: 11, textAlign: "left" }}>
@@ -117,7 +117,7 @@ export default function AsoReport({ isClient, name }) {
       <div className="card" style={{ marginTop: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <b style={{ fontSize: 15 }}>Competitor apps</b>
-          <span className="pill p-agency">demo · connect stores</span>
+          <span className="pill p-agency">demo · connect stores</span><span style={{ fontSize: 11, background: "#FDECC8", color: "#7A4B0C", padding: "2px 8px", borderRadius: 20, marginLeft: 6 }}>estimate</span>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 10 }}>
           {apps.map((a) => (

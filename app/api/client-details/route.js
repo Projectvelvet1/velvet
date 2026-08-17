@@ -30,6 +30,9 @@ export async function POST(req) {
   if (body.health !== undefined) patch.health = ["healthy","watch","risk"].includes(body.health) ? body.health : "healthy";
   if (body.upsell !== undefined) patch.upsell = (body.upsell || "").trim() || null;
   if (body.notes !== undefined) patch.notes = (body.notes || "").trim() || null;
+  if (body.kpiLabel !== undefined) patch.kpi_label = (body.kpiLabel || "").trim() || null;
+  if (body.kpiValue !== undefined) patch.kpi_value = (body.kpiValue || "").trim() || null;
+  if (body.kpiCaption !== undefined) patch.kpi_caption = (body.kpiCaption || "").trim() || null;
   if (Object.keys(patch).length) {
     const { error } = await db.from("workspaces").update(patch).eq("id", id);
     if (error) return Response.json({ error: error.message }, { status: 500 });

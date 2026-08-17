@@ -58,6 +58,18 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   const [dBusy, setDBusy] = useState(false);
   const [dErr, setDErr] = useState("");
   const [wsLocal, setWsLocal] = useState(workspace);
+  const canEditKpi = !!profile?.is_super_admin;
+  const [kpiEdit, setKpiEdit] = useState(false);
+  const [kpiForm, setKpiForm] = useState({ label: "", value: "", caption: "" });
+  const [kpiSaving, setKpiSaving] = useState(false);
+  function openKpiEdit() { setKpiForm({ label: wsLocal.kpi_label || "", value: wsLocal.kpi_value || "", caption: wsLocal.kpi_caption || "" }); setKpiEdit(true); }
+  async function saveKpi() {
+    setKpiSaving(true);
+    const { data } = await supabase.auth.getSession();
+    await fetch("/api/client-details", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token}` }, body: JSON.stringify({ workspaceId: wsLocal.id, kpiLabel: kpiForm.label, kpiValue: kpiForm.value, kpiCaption: kpiForm.caption }) }).catch(() => {});
+    setWsLocal({ ...wsLocal, kpi_label: kpiForm.label, kpi_value: kpiForm.value, kpi_caption: kpiForm.caption });
+    setKpiSaving(false); setKpiEdit(false);
+  }
   const [fbQs, setFbQs] = useState([]);
   const [showFb, setShowFb] = useState(false);
   const [fbScores, setFbScores] = useState({});
@@ -305,6 +317,38 @@ export default function ClientView({ workspace, services = [], profile, viewingA
         <h1 style={{ fontSize: 24 }}>{viewingAs ? wsLocal.name : `Welcome, ${firstName}`}</h1>
         <span className="pill p-client">{isProspect ? "Discovery" : "Client"}</span>
       </div>
+
+      {onboarded && !isProspect && (viewingAs || clientTab === "home") && (wsLocal.kpi_label || wsLocal.kpi_value || canEditKpi) && (
+        <div className="card" style={{ background: "var(--ink,#0B0D12)", color: "#fff", borderColor: "var(--ink,#0B0D12)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 12, color: "#9AA3B2", textTransform: "uppercase", letterSpacing: .4 }}>{wsLocal.kpi_label || "Headline metric"}</div>
+              <div style={{ fontSize: 34, fontWeight: 800, marginTop: 4, lineHeight: 1.1 }}>{wsLocal.kpi_value || (canEditKpi ? "Set a value" : "—")}</div>
+              {wsLocal.kpi_caption ? <div style={{ fontSize: 13, color: "#C7CDD8", marginTop: 3 }}>{wsLocal.kpi_caption}</div> : null}
+            </div>
+            {canEditKpi && <button className="btn" style={{ background: "#1B1F2A", color: "#fff", borderColor: "#2A3550" }} onClick={openKpiEdit}>Edit</button>}
+          </div>
+          {!wsLocal.kpi_label && canEditKpi ? <div style={{ fontSize: 12, color: "#9AA3B2", marginTop: 8 }}>Set the single most important number for this client (for example Leads, or Account openings). Only you (super admin) see this control; the client sees the metric.</div> : null}
+        </div>
+      )}
+
+      {kpiEdit && (
+        <Modal title="Headline metric" onClose={() => setKpiEdit(false)}>
+          <div style={{ padding: 16 }}>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12 }}>The single most important number for this client, shown at the top of their portal.</div>
+            <label style={{ fontSize: 12, color: "var(--muted)" }}>Label</label>
+            <input className="input" style={{ marginTop: 4, marginBottom: 10 }} value={kpiForm.label} onChange={(e) => setKpiForm({ ...kpiForm, label: e.target.value })} placeholder="e.g. Leads this month" />
+            <label style={{ fontSize: 12, color: "var(--muted)" }}>Value</label>
+            <input className="input" style={{ marginTop: 4, marginBottom: 10 }} value={kpiForm.value} onChange={(e) => setKpiForm({ ...kpiForm, value: e.target.value })} placeholder="e.g. 1,284" />
+            <label style={{ fontSize: 12, color: "var(--muted)" }}>Caption (optional)</label>
+            <input className="input" style={{ marginTop: 4 }} value={kpiForm.caption} onChange={(e) => setKpiForm({ ...kpiForm, caption: e.target.value })} placeholder="e.g. +12% vs last month" />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+              <button className="btn" onClick={() => setKpiEdit(false)}>Cancel</button>
+              <button className="btn btn-primary" disabled={kpiSaving} onClick={saveKpi}>{kpiSaving ? "Saving…" : "Save"}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {!viewingAs && !isProspect && clientTab === "home" && (
         <div className="card" style={{ borderColor: "var(--border-accent)" }}>
