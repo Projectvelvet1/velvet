@@ -50,6 +50,7 @@ export default function Settings() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
         {tile("Ask Velvet training", "Teach Ask Velvet how each department wants its answers, and which data sources to use.", "/settings/velvet")}
         {profile?.is_super_admin && tile("Onboarding questions", "Manage the questions clients and future clients answer.", "/questions")}
+        {tile("Maturity questionnaires", "Build a service's maturity questionnaire, get it approved, score assessments, and draft the roadmap.", "/settings/maturity")}
       </div>
 
       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--muted)", margin: "4px 0 8px" }}>Coming soon</div>
