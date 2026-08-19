@@ -9,14 +9,24 @@ import AddTask from "../../../../../components/AddTask";
 import AssignTask from "../../../../../components/AssignTask";
 import AskVelvet from "../../../../../components/AskVelvet";
 import TaskDetail from "../../../../../components/TaskDetail";
-import PaidMediaReport from "../../../../../components/PaidMediaReport";
-import AsoReport from "../../../../../components/AsoReport";
-import AnalyticsReport from "../../../../../components/AnalyticsReport";
-import TrackingReport from "../../../../../components/TrackingReport";
-import CreativeReport from "../../../../../components/CreativeReport";
-import UgcReport from "../../../../../components/UgcReport";
-import AssetReport from "../../../../../components/AssetReport";
+import nextDynamic from "next/dynamic";
 import { loadAgencyDepts, DEPARTMENTS } from "../../../../../lib/agencyNav";
+
+const ReportSkeleton = () => (
+  <div style={{ marginTop: 12 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 12 }}>
+      {[0, 1, 2, 3].map((i) => <div key={i} className="card" style={{ margin: 0, height: 74, background: "var(--cloud,#F5F6F8)", border: "none" }} />)}
+    </div>
+    <div className="card" style={{ height: 200, background: "var(--cloud,#F5F6F8)", border: "none" }} />
+  </div>
+);
+const PaidMediaReport = nextDynamic(() => import("../../../../../components/PaidMediaReport"), { loading: () => <ReportSkeleton />, ssr: false });
+const AsoReport = nextDynamic(() => import("../../../../../components/AsoReport"), { loading: () => <ReportSkeleton />, ssr: false });
+const AnalyticsReport = nextDynamic(() => import("../../../../../components/AnalyticsReport"), { loading: () => <ReportSkeleton />, ssr: false });
+const TrackingReport = nextDynamic(() => import("../../../../../components/TrackingReport"), { loading: () => <ReportSkeleton />, ssr: false });
+const CreativeReport = nextDynamic(() => import("../../../../../components/CreativeReport"), { loading: () => <ReportSkeleton />, ssr: false });
+const UgcReport = nextDynamic(() => import("../../../../../components/UgcReport"), { loading: () => <ReportSkeleton />, ssr: false });
+const AssetReport = nextDynamic(() => import("../../../../../components/AssetReport"), { loading: () => <ReportSkeleton />, ssr: false });
 
 export const dynamic = "force-dynamic";
 

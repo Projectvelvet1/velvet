@@ -5,11 +5,13 @@ import { supabase } from "../../lib/supabase";
 import Shell from "../../components/Shell";
 import AgencyNav from "../../components/AgencyNav";
 import AskVelvet from "../../components/AskVelvet";
-import ClientDrawer from "../../components/ClientDrawer";
-import ServiceDrawer from "../../components/ServiceDrawer";
+import nextDynamic from "next/dynamic";
 import TaskDetail from "../../components/TaskDetail";
 import { notify } from "../../lib/notify";
+const ClientDrawer = nextDynamic(() => import("../../components/ClientDrawer"), { ssr: false });
+const ServiceDrawer = nextDynamic(() => import("../../components/ServiceDrawer"), { ssr: false });
 import { departmentsForRole, DEPARTMENTS } from "../../lib/agencyNav";
+import { cachedProfile } from "../../lib/cache";
 
 const HEALTH = { healthy: { l: "Healthy", bg: "#E4F6EC", fg: "#177E4E" }, watch: { l: "To watch", bg: "#FDEBD3", fg: "#B4640C" }, risk: { l: "At risk", bg: "#FBEAE6", fg: "#C0392B" }, held: { l: "Held", bg: "#EEF1F4", fg: "#5B6472" } };
 const DEPT_COLOR = { performance: "#C0392B", content: "#7C3AED", analytics: "#1E7F5C" };
@@ -49,8 +51,7 @@ export default function Overview() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.replace("/login"); return; }
       const uid = session.user.id;
-      const { data: prof } = await supabase.from("profiles").select("id,full_name,email,side,is_super_admin").eq("id", uid).single();
-      const p = prof || { id: uid, email: session.user.email, side: "agency" };
+      const p = (await cachedProfile()) || { id: uid, email: session.user.email, side: "agency" };
       setProfile(p);
       if (p.side === "client") { router.replace("/dashboard"); return; }
 

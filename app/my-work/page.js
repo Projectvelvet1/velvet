@@ -8,6 +8,7 @@ import AddTask from "../../components/AddTask";
 import AskVelvet from "../../components/AskVelvet";
 import TaskDetail from "../../components/TaskDetail";
 import { departmentsForRole, DEPARTMENTS } from "../../lib/agencyNav";
+import { cachedProfile } from "../../lib/cache";
 
 const SVC_LABEL = {}; DEPARTMENTS.forEach((d) => d.services.forEach((x) => { SVC_LABEL[x.key] = x.label; }));
 const PRIO_W = { urgent: 3, high: 2, medium: 1, low: 0 };
@@ -39,8 +40,7 @@ export default function MyWork() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.replace("/login"); return; }
       const uid = session.user.id;
-      const { data: prof } = await supabase.from("profiles").select("id,full_name,email,side,is_super_admin").eq("id", uid).single();
-      const p = prof || { id: uid, email: session.user.email, side: "agency" };
+      const p = (await cachedProfile()) || { id: uid, email: session.user.email, side: "agency" };
       setProfile(p);
       if (p.side === "client") { router.replace("/dashboard"); return; }
 
