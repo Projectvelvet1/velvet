@@ -7,6 +7,8 @@ import AgencyNav from "../../components/AgencyNav";
 import AskVelvet from "../../components/AskVelvet";
 import ClientDrawer from "../../components/ClientDrawer";
 import ServiceDrawer from "../../components/ServiceDrawer";
+import TaskDetail from "../../components/TaskDetail";
+import { notify } from "../../lib/notify";
 import { departmentsForRole, DEPARTMENTS } from "../../lib/agencyNav";
 
 const HEALTH = { healthy: { l: "Healthy", bg: "#E4F6EC", fg: "#177E4E" }, watch: { l: "To watch", bg: "#FDEBD3", fg: "#B4640C" }, risk: { l: "At risk", bg: "#FBEAE6", fg: "#C0392B" }, held: { l: "Held", bg: "#EEF1F4", fg: "#5B6472" } };
@@ -39,6 +41,7 @@ export default function Overview() {
   const [openService, setOpenService] = useState(null);
   const [signals, setSignals] = useState(SIGNALS.map((s) => ({ ...s, owner: null })));
   const [assignOpen, setAssignOpen] = useState(null);
+  const [openSignal, setOpenSignal] = useState(null);
   const [usageMode, setUsageMode] = useState("individual");
 
   useEffect(() => {
@@ -188,7 +191,7 @@ export default function Overview() {
               <span style={{ width: 34, height: 34, borderRadius: 9, background: "var(--cloud,#F5F6F8)", display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none" }}>{s.icon}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <b style={{ fontSize: 13 }}>{s.title}</b>
+                  <b style={{ fontSize: 13, cursor: "pointer" }} onClick={() => setOpenSignal({ id: "sig" + s.id, title: s.title, description: s.desc, service_key: null, status: "todo", priority: s.urgency, client: s.cat, assignee_id: null })}>{s.title}</b>
                   <span className="pill" style={{ background: u.bg, color: u.fg }}>{s.urgency}</span>
                   <span className="pill" style={{ background: "#EEF1F4", color: "#5B6472" }}>{s.cat}</span>
                 </div>
@@ -200,7 +203,7 @@ export default function Overview() {
                   <div style={{ position: "absolute", right: 0, top: "100%", marginTop: 4, background: "#fff", border: "1px solid var(--line)", borderRadius: 10, boxShadow: "0 10px 30px rgba(0,0,0,.12)", zIndex: 5, minWidth: 180, maxHeight: 220, overflowY: "auto" }}>
                     {team.length === 0 ? <div style={{ padding: 10, fontSize: 12, color: "var(--faint)" }}>No team members</div>
                       : team.map((m) => (
-                        <div key={m.id} style={{ padding: "9px 12px", fontSize: 13, cursor: "pointer" }} onClick={() => { setSignals(signals.map((x) => x.id === s.id ? { ...x, owner: m.name } : x)); setAssignOpen(null); }}>{m.name}</div>
+                        <div key={m.id} style={{ padding: "9px 12px", fontSize: 13, cursor: "pointer" }} onClick={() => { setSignals(signals.map((x) => x.id === s.id ? { ...x, owner: m.name } : x)); notify({ type: "task_assigned", text: `Assigned to ${m.name}: ${s.title}`, meta: { signal: s.id } }); setAssignOpen(null); }}>{m.name}</div>
                       ))}
                   </div>
                 )}
@@ -307,8 +310,9 @@ export default function Overview() {
         </div>
       </div>
 
-      {openClient && <ClientDrawer key={openClient.id} client={openClient} onClose={() => setOpenClient(null)} />}
+      {openClient && <ClientDrawer key={openClient.id} client={openClient} canManage onClose={() => setOpenClient(null)} />}
       {openService && <ServiceDrawer service={openService} onClose={() => setOpenService(null)} onOpenClient={openClientById} />}
+      {openSignal && <TaskDetail task={openSignal} onClose={() => setOpenSignal(null)} people={team.map((m) => ({ id: m.id, name: m.name, side: "agency" }))} onChanged={(u) => setOpenSignal(u)} />}
     </Shell>
   );
 }
