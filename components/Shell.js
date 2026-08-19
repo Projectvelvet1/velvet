@@ -3,11 +3,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 import NotificationsBell from "./NotificationsBell";
+import { clearCache } from "../lib/cache";
 
 export default function Shell({ profile, roleLabel, nav, children, banner, footer }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  async function signOut() { await supabase.auth.signOut(); router.replace("/login"); }
+  async function signOut() { clearCache(); await supabase.auth.signOut(); router.replace("/login"); }
   return (
     <div className="shell">
       <div className="mtop">
