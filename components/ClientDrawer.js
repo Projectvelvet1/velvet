@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { loadQuestions } from "../lib/onboardingQuestions";
+import Modal from "./Modal";
+import { notify } from "../lib/notify";
 
 // Props: client (rich), onClose()
 // Real data: onboarding answers, feedback trend, services, team, health.
@@ -31,11 +33,14 @@ function Trend({ points }) {
   );
 }
 
-export default function ClientDrawer({ client, onClose }) {
+export default function ClientDrawer({ client, onClose, canManage = false }) {
   const [tab, setTab] = useState("Snapshot");
   const [answers, setAnswers] = useState(null);   // [{label, answer}]
   const [fbSeries, setFbSeries] = useState(null);  // numbers
   const [fbComments, setFbComments] = useState([]);
+  const [openPlan, setOpenPlan] = useState(null);  // plan index for detail modal
+  const [itemForm, setItemForm] = useState({ service: "", text: "" });
+  const [shared, setShared] = useState(false);
   // in-memory demo state
   const [goals, setGoals] = useState([]);
   const [plans, setPlans] = useState([]);
@@ -191,14 +196,14 @@ export default function ClientDrawer({ client, onClose }) {
                     <select className="input" value={pForm.q} onChange={(e) => setPForm({ ...pForm, q: e.target.value })}>{QS.map((q) => <option key={q}>{q}</option>)}</select>
                     <select className="input" value={pForm.y} onChange={(e) => setPForm({ ...pForm, y: +e.target.value })}>{YEARS.map((y) => <option key={y}>{y}</option>)}</select>
                   </div>
-                  <button className="btn btn-primary" style={{ marginTop: 10 }} onClick={() => { if (!pForm.title.trim()) return; setPlans([...plans, pForm]); setPForm({ title: "", owner: "", due: "", q: "Q1", y: 2026 }); setShowPlan(false); }}>Save</button>
+                  <button className="btn btn-primary" style={{ marginTop: 10 }} onClick={() => { if (!pForm.title.trim()) return; setPlans([...plans, { ...pForm, items: [] }]); setPForm({ title: "", owner: "", due: "", q: "Q1", y: 2026 }); setShowPlan(false); }}>Save</button>
                 </div>
               )}
               {plans.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)", marginTop: 10 }}>No action plans yet.</div>
                 : plans.map((p, i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: "0.5px solid var(--line)" }}>
-                    <div><div style={{ fontSize: 13 }}>{p.title}</div><div style={{ fontSize: 11, color: "var(--faint)" }}>{p.q} {p.y}{p.owner ? " · " + p.owner : ""}{p.due ? " · due " + p.due : ""}</div></div>
-                    <span className="pill" style={{ background: "#EEF0FF", color: "#3B49C7" }}>Planned</span>
+                  <div key={i} onClick={() => { setItemForm({ service: (client.services || [])[0] || "", text: "" }); setOpenPlan(i); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderTop: "0.5px solid var(--line)", cursor: "pointer" }}>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{p.q} {p.y}<span style={{ color: "var(--faint)", fontWeight: 400 }}> · {p.title}</span></div>
+                    <span style={{ display: "flex", gap: 8, alignItems: "center" }}><span style={{ fontSize: 11, color: "var(--faint)" }}>{(p.items || []).length} item{(p.items || []).length === 1 ? "" : "s"}</span><span style={{ color: "var(--faint)" }}>›</span></span>
                   </div>
                 ))}
             </div>
@@ -209,7 +214,12 @@ export default function ClientDrawer({ client, onClose }) {
               {answers === null ? <div style={{ fontSize: 13, color: "var(--faint)" }}>Loading answers…</div>
                 : answers.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>No onboarding form found for this client.</div>
                   : <>
-                    <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>{answers.filter((a) => a.answer).length} of {answers.length} answered</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                      <div style={{ fontSize: 12, color: "var(--muted)" }}>{answers.filter((a) => a.answer).length} of {answers.length} answered</div>
+                      {canManage && (shared
+                        ? <span className="pill" style={{ background: "#E7F6EF", color: "#177E4E" }}>Shared with team</span>
+                        : <button className="btn btn-ghost" style={{ padding: "6px 10px" }} onClick={() => { setShared(true); notify({ type: "onboarding_shared", text: `Onboarding shared with ${client.name}'s team`, meta: { client: client.id } }); }}>Share with team</button>)}
+                    </div>
                     {answers.map((a, i) => (
                       <div key={i} style={{ padding: "10px 0", borderTop: i ? "0.5px solid var(--line)" : "none" }}>
                         <div style={{ fontSize: 12, color: "var(--faint)" }}>{a.label}</div>
@@ -319,6 +329,38 @@ export default function ClientDrawer({ client, onClose }) {
           )}
         </div>
       </div>
+
+      {openPlan !== null && plans[openPlan] && (() => {
+        const p = plans[openPlan];
+        const svcList = client.services || [];
+        const grouped = {}; svcList.forEach((s) => { grouped[s] = (p.items || []).filter((it) => it.service === s); });
+        const ungrouped = (p.items || []).filter((it) => !svcList.includes(it.service));
+        const addItem = () => { if (!itemForm.text.trim()) return; const next = plans.map((x, i) => i === openPlan ? { ...x, items: [...(x.items || []), { service: itemForm.service || (svcList[0] || "General"), text: itemForm.text.trim() }] } : x); setPlans(next); setItemForm({ service: itemForm.service, text: "" }); };
+        return (
+          <Modal title={`${p.q} ${p.y} — ${p.title}`} onClose={() => setOpenPlan(null)}>
+            <div style={{ fontSize: 12, color: "var(--faint)", marginBottom: 12 }}>{[p.owner, p.due ? "due " + p.due : null].filter(Boolean).join(" · ") || "Action plan"}</div>
+            {svcList.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>This client has no purchased services to group by.</div>
+              : svcList.map((s) => (
+                <div key={s} style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}><span className="pill p-agency">{s}</span></div>
+                  {grouped[s].length === 0 ? <div style={{ fontSize: 12, color: "var(--faint)" }}>No items yet.</div>
+                    : grouped[s].map((it, i) => <div key={i} style={{ fontSize: 13, padding: "6px 0", borderTop: "0.5px solid var(--line)" }}>{it.text}</div>)}
+                </div>
+              ))}
+            {ungrouped.length > 0 && <div style={{ marginBottom: 12 }}><div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Other</div>{ungrouped.map((it, i) => <div key={i} style={{ fontSize: 13, padding: "6px 0", borderTop: "0.5px solid var(--line)" }}>{it.text}</div>)}</div>}
+            <div style={{ background: "var(--cloud,#F5F6F8)", borderRadius: 10, padding: 12, marginTop: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Add item</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <select className="input" style={{ maxWidth: 180 }} value={itemForm.service} onChange={(e) => setItemForm({ ...itemForm, service: e.target.value })}>
+                  {(svcList.length ? svcList : ["General"]).map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <input className="input" placeholder="What will be done" value={itemForm.text} onChange={(e) => setItemForm({ ...itemForm, text: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") addItem(); }} />
+              </div>
+              <button className="btn btn-primary" style={{ marginTop: 10 }} onClick={addItem}>Add</button>
+            </div>
+          </Modal>
+        );
+      })()}
     </div>
   );
 }

@@ -312,7 +312,13 @@ export default function ClientView({ workspace, services = [], profile, viewingA
   return (
     <Shell profile={shellProfile} roleLabel={viewingAs ? "Client view" : "Client"} nav={nav} banner={banner} footer={footer}>
       {assignModal}
-      {openTask && <TaskDetail task={openTask} onClose={() => setOpenTask(null)} />}
+      {openTask && <TaskDetail
+        task={openTask}
+        onClose={() => setOpenTask(null)}
+        canReview={!viewingAs}
+        people={(team?.clientTeam || []).map((m) => ({ id: m.id, name: m.name, side: "client" }))}
+        onChanged={(u) => { setMyTasks((ts) => ts.map((x) => (x.id === u.id ? u : x))); setOpenTask(u); }}
+      />}
       <div className="page-head">
         <h1 style={{ fontSize: 24 }}>{viewingAs ? wsLocal.name : `Welcome, ${firstName}`}</h1>
         <span className="pill p-client">{isProspect ? "Discovery" : "Client"}</span>
@@ -448,10 +454,13 @@ export default function ClientView({ workspace, services = [], profile, viewingA
               <div className="card">
                 <div style={{ fontSize: 12, color: "var(--faint)", marginBottom: 8 }}>Tasks assigned to you. If you lead this account, you also see tasks assigned to your teammates and who they went to.</div>
                 {myTasks.length === 0 ? <div style={{ fontSize: 13, color: "var(--faint)" }}>Nothing assigned to you yet.</div>
-                  : myTasks.map((t) => { const who = t.assignee_id === meId ? "you" : (((team?.clientTeam || []).find((m) => m.id === t.assignee_id) || {}).name || "a teammate"); return (
+                  : myTasks.map((t) => { const who = t.assignee_id === meId ? "you" : (((team?.clientTeam || []).find((m) => m.id === t.assignee_id) || {}).name || "a teammate"); const SP = { todo: { l: "To do", bg: "#EEF0FF", fg: "#3B49C7" }, in_progress: { l: "In progress", bg: "#FCEFC3", fg: "#7A5B00" }, delivered: { l: "Awaiting your review", bg: "#F0E9FB", fg: "#7C3AED" }, reviewed: { l: "Reviewed", bg: "#E7F6EF", fg: "#177E4E" }, needs_look: { l: "Needs another look", bg: "#FDEBD3", fg: "#B4640C" } }[t.status] || { l: t.status, bg: "#EEF1F4", fg: "#5B6472" }; return (
                       <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 0", borderTop: "0.5px solid var(--line)" }}>
                         <div style={{ minWidth: 0 }}><div style={{ fontSize: 13 }}>{t.title}</div><div style={{ fontSize: 11, color: "var(--faint)", marginTop: 1 }}>To: {who}{t.due_date ? " · due " + t.due_date : ""}</div></div>
-                        <button className="btn btn-ghost" style={{ padding: "4px 10px", flex: "none" }} onClick={() => setOpenTask(t)}>Open</button>
+                        <span style={{ display: "flex", gap: 6, alignItems: "center", flex: "none" }}>
+                          <span className="pill" style={{ background: SP.bg, color: SP.fg }}>{SP.l}</span>
+                          <button className="btn btn-ghost" style={{ padding: "4px 10px" }} onClick={() => setOpenTask(t)}>Open</button>
+                        </span>
                       </div>
                     ); })}
               </div>

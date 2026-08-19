@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
+import NotificationsBell from "./NotificationsBell";
 
 export default function Shell({ profile, roleLabel, nav, children, banner, footer }) {
   const router = useRouter();
@@ -31,6 +32,7 @@ export default function Shell({ profile, roleLabel, nav, children, banner, foote
       </aside>
 
       <main className="main">
+        <NotificationsBell />
         {banner}
         {children}
       </main>
